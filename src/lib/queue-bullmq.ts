@@ -85,13 +85,12 @@ const getConnection = (): IORedis => {
 };
 
 // Queue para mensagens do WhatsApp
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let messageQueue: Queue<MessageQueueJob> | null = null;
 
 export const getMessageQueue = (): Queue<MessageQueueJob> => {
     if (!messageQueue) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         messageQueue = new Queue<MessageQueueJob>("whatsapp-messages", {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             connection: getConnection() as any,
             defaultJobOptions: {
                 attempts: 3,
