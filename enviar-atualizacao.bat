@@ -1,36 +1,43 @@
 @echo off
 chcp 65001 >nul
-color 0A
-echo ========================================================
-echo      🚀 SISTEMA DE ATUALIZAÇÃO LUMUS AI
-echo ========================================================
-echo.
-echo Este script vai enviar suas alteracoes para o GitHub.
-echo.
-
-:CONFIRM
-set /p msg="📝 Descreva o que você mudou (Ex: corrigi cor do botao): "
-if "%msg%"=="" goto CONFIRM
+title NozesIA - Enviar Atualizações
 
 echo.
-echo [1/3] 🔍 Preparando arquivos...
+echo ╔════════════════════════════════════════════╗
+echo ║      NozesIA - Enviar Atualizações         ║
+echo ╚════════════════════════════════════════════╝
+echo.
+
+cd /d "C:\Users\Saymon\Desktop\PROJETOS\nozesia"
+
+echo [1/4] Verificando alterações...
+git status --short
+echo.
+
+set /p MSG="Digite a mensagem do commit (ou Enter para 'Update'): "
+if "%MSG%"=="" set MSG=Update
+
+echo.
+echo [2/4] Adicionando arquivos...
 git add .
 
 echo.
-echo [2/3] 💾 Salvando alterações...
-git commit -m "%msg%"
+echo [3/4] Fazendo commit: %MSG%
+git commit -m "%MSG%"
 
 echo.
-echo [3/3] ☁️  Enviando para a nuvem...
+echo [4/4] Enviando para GitHub...
 git push origin main
 
 echo.
-echo ========================================================
-echo ✅ SUCESSO! Código enviado para o GitHub.
-echo ========================================================
+echo ════════════════════════════════════════════
+echo ✅ Atualizações enviadas com sucesso!
 echo.
-echo AGORA O ÚLTIMO PASSO:
-echo 1. Abra o terminal da sua VPS (SSH)
-echo 2. Digite: ./deploy.sh
+echo Agora conecte na VPS e execute:
+echo   su - nozesia
+echo   cd htdocs/nozesia.pro
+echo   ./atualizar.sh
+echo ════════════════════════════════════════════
 echo.
+
 pause
