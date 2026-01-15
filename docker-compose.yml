@@ -1,0 +1,34 @@
+version: '3.8'
+services:
+  postgres:
+    container_name: nozesia-db
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: nozesia123
+      POSTGRES_DB: nozesia
+    ports:
+      - "5433:5432"
+    volumes:
+      - nozesia_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+  wppconnect:
+    container_name: nozesia-wpp
+    image: wppconnect/server-cli:latest
+    environment:
+      - WPPCONNECT_SECRET_KEY=nozesia-secret-key-2024
+      - WPPCONNECT_HOST=0.0.0.0
+      - WPPCONNECT_PORT=21465
+      - WPPCONNECT_WEBHOOK_URL=http://host.docker.internal:3001/api/whatsapp/webhook
+      - WPPCONNECT_WEBHOOK_READ_MESSAGE=true
+      - WPPCONNECT_WEBHOOK_ALL_UNREAD_ON_START=false
+    ports:
+      - "21466:21465"
+    volumes:
+      - nozesia_wpp_tokens:/usr/src/wpp-server/tokens
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+volumes:
+  nozesia_postgres_data:
+  nozesia_wpp_tokens:

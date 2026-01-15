@@ -1,0 +1,1462 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================
+// AUTHENTICATION
+// ========================
+
+enum UserRole {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  COMPANY_USER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          UserRole  @default(COMPANY_USER)
+  avatar        String?
+  
+  // Email verification
+  emailVerified Boolean   @default(false)
+  emailVerifiedAt DateTime?
+  
+  // Two-Factor Authentication
+  twoFactorEnabled Boolean   @default(false)
+  twoFactorSecret  String?   // Encrypted TOTP secret
+  
+  companyId     String?
+  company       Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+  
+  // Onboarding
+  onboardingCompleted Boolean   @default(false)
+  onboardingStep      Int       @default(0)
+  
+  messages      Message[] @relation("SentByUser")
+  assignedConversations Conversation[] @relation("AssignedConversations")
+  verificationTokens VerificationToken[]
+  supportTickets SupportTicket[]
+  
+  @@index([companyId])
+  @@index([email])
+}
+
+// Token de verificação de email
+model VerificationToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  type      String   // "EMAIL_VERIFICATION" | "PASSWORD_RESET"
+  expiresAt DateTime
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  usedAt    DateTime?
+  
+  @@index([token])
+  @@index([userId])
+}
+
+// ========================
+// MULTI-TENANT
+// ========================
+
+enum CompanyStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+model Company {
+  id            String        @id @default(cuid())
+  name          String
+  document      String?
+  email         String        @unique
+  phone         String?
+  status        CompanyStatus @default(PENDING)
+  
+  // Business context for AI
+  niche         String?       // Ex: "Loja de roupas", "Restaurante", "Clínica estética"
+  description   String?       @db.Text // Descrição detalhada do negócio para a IA
+  
+  // AI Control
+  aiEnabled     Boolean       @default(true) // Global toggle to enable/disable AI responses
+  
+  timezone      String        @default("America/Sao_Paulo")
+  settings      String        @default("{}")
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  users         User[]
+  subscription  Subscription?
+  sessions      WhatsAppSession[]
+  agents        AIAgent[]
+  conversations Conversation[]
+  invoices      Invoice[]
+  tokenUsage    TokenUsage[]
+  auditLogs     AuditLog[]
+  systemLogs    SystemLog[]
+  interests     CustomerInterest[]
+  orders        Order[]
+  customerMemories CustomerMemory[]
+  webhooks      Webhook[]
+  products      Product[]
+  categories    Category[]
+  deliveryZones DeliveryZone[]
+  campaigns     Campaign[]
+  contactPreferences ContactPreference[]
+  messageTemplates MessageTemplate[]
+  autoRecoveryConfig AutoRecoveryConfig?
+  tags          Tag[]
+  deals         Deal[]
+  customerNotes CustomerNote[]
+  contactTags   ContactTag[]
+  supportTickets SupportTicket[]
+  calendarIntegration GoogleCalendarIntegration?
+  appointments  Appointment[]
+  
+  // PIX para recebimentos
+  pixKeyType    String?       // CPF, CNPJ, EMAIL, TELEFONE, ALEATORIA
+  pixKey        String?       // Chave PIX
+  
+  // Trial period
+  trialEndsAt   DateTime?     // Null = no trial, Date = trial end
+  trialUsed     Boolean       @default(false)
+  
+  // Limite de tokens (0 = uses plan limit)
+  monthlyTokenLimit Int       @default(0)
+  
+  // Extras purchased (adds to plan limits)
+  extraAgents       Int       @default(0)
+  extraWhatsApps    Int       @default(0)
+  
+  // Módulos do sidebar ativados (JSON array)
+  enabledModules    String    @default("[]")
+  
+  @@index([email])
+  @@index([status])
+}
+
+// ========================
+// DELIVERY ZONES (Bairros)
+// ========================
+
+model DeliveryZone {
+  id          String   @id @default(cuid())
+  
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  name        String   // Nome do bairro/região
+  fee         Float    // Taxa de entrega em R$
+  estimatedTime String? // Tempo estimado (ex: "30-45 min")
+  isActive    Boolean  @default(true)
+  order       Int      @default(0) // Ordem de exibição
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@index([isActive])
+}
+
+// ========================
+// CUSTOMER TAGS
+// ========================
+
+model Tag {
+  id        String   @id @default(cuid())
+  
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  name      String   // Nome da tag (VIP, Problemático, B2B)
+  color     String   @default("#a78bfa") // Cor hex
+  
+  // Many-to-many with Conversations
+  conversations Conversation[]
+  
+  // Many-to-many with Contacts (via ContactTag)
+  contactTags   ContactTag[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+// ========================
+// SALES PIPELINE (DEALS)
+// ========================
+
+enum DealStage {
+  LEAD          // Novo lead
+  INTERESTED    // Demonstrou interesse
+  NEGOTIATING   // Em negociação
+  CLOSED_WON    // Fechado (ganho)
+  CLOSED_LOST   // Fechado (perdido)
+}
+
+model Deal {
+  id            String    @id @default(cuid())
+  
+  companyId     String
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  customerPhone String
+  customerName  String?
+  title         String    // Descrição do negócio
+  value         Float     @default(0) // Valor potencial em R$
+  stage         DealStage @default(LEAD)
+  notes         String?   @db.Text
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  closedAt      DateTime?
+  
+  @@index([companyId])
+  @@index([stage])
+  @@index([customerPhone])
+}
+// ========================
+// PLANS & BILLING
+// ========================
+
+enum PlanType {
+  TRIAL
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+model Plan {
+  id                  String    @id @default(cuid())
+  name                String
+  type                PlanType  @unique
+  price               Float
+  
+  // Core limits
+  maxWhatsAppNumbers  Int
+  maxAgents           Int
+  maxMessagesMonth    Int       // -1 = unlimited
+  maxTokensMonth      Int       // -1 = unlimited
+  
+  // Resource limits
+  maxProducts         Int       @default(50)
+  maxTemplates        Int       @default(10)
+  maxCampaignsMonth   Int       @default(0)  // 0 = disabled
+  maxWebhooks         Int       @default(0)  // 0 = disabled
+  maxDeliveryZones    Int       @default(5)
+  maxTeamMembers      Int       @default(1)
+  maxCreativesMonth   Int       @default(0)  // AI Image generation
+  
+  // Feature flags
+  features            String    @default("[]")
+  allowAudio          Boolean   @default(false)
+  allowVoice          Boolean   @default(false)
+  allowHumanTransfer  Boolean   @default(false)
+  allowApiAccess      Boolean   @default(false)
+  allowWhiteLabel     Boolean   @default(false)
+  allowAnalytics      Boolean   @default(false)
+  allowCRM            Boolean   @default(false)
+  allowDeals          Boolean   @default(false)
+  allowCampaigns      Boolean   @default(false)
+  allowAutoRecovery   Boolean   @default(false)
+  allowCalendar       Boolean   @default(false)
+  
+  // Extras pricing (monthly)
+  extraAgentPrice     Float     @default(29.99)
+  extraWhatsAppPrice  Float     @default(29.99)
+  
+  isActive            Boolean   @default(true)
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  subscriptions       Subscription[]
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+model Subscription {
+  id                  String             @id @default(cuid())
+  
+  companyId           String             @unique
+  company             Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  planId              String
+  plan                Plan               @relation(fields: [planId], references: [id])
+  
+  status              SubscriptionStatus @default(ACTIVE)
+  
+  paymentGatewayId    String?
+  currentPeriodStart  DateTime
+  currentPeriodEnd    DateTime
+  
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  cancelledAt         DateTime?
+  
+  @@index([status])
+}
+
+model Invoice {
+  id            String    @id @default(cuid())
+  
+  companyId     String
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  amount        Float
+  description   String
+  dueDate       DateTime
+  paidAt        DateTime?
+  
+  status        String    @default("pending")
+  
+  createdAt     DateTime  @default(now())
+  
+  @@index([companyId])
+  @@index([status])
+}
+
+// ========================
+// WHATSAPP
+// ========================
+
+enum SessionStatus {
+  DISCONNECTED
+  CONNECTING
+  QR_CODE
+  CONNECTED
+  ERROR
+}
+
+model WhatsAppSession {
+  id            String        @id @default(cuid())
+  
+  companyId     String
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  phoneNumber   String?
+  sessionName   String
+  status        SessionStatus @default(DISCONNECTED)
+  qrCode        String?
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  lastSeenAt    DateTime?
+  
+  conversations Conversation[]
+  
+  @@unique([companyId, sessionName])
+  @@index([status])
+}
+
+// ========================
+// AI AGENTS
+// ========================
+
+model AIAgent {
+  id              String    @id @default(cuid())
+  
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  name            String
+  description     String?
+  avatar          String?
+  
+  personality     String
+  tone            String?
+  language        String    @default("pt-BR")
+  
+  canSell         Boolean   @default(false)
+  canNegotiate    Boolean   @default(false)
+  canSchedule     Boolean   @default(false)
+  transferToHuman Boolean   @default(true)
+  
+  // Voice Synthesis (TTS)
+  voiceEnabled    Boolean   @default(false)  // Enable AI to respond with audio
+  voiceId         String    @default("nova") // OpenAI voice: alloy, echo, fable, onyx, nova, shimmer
+  
+  workingHours    String?
+  
+  isActive        Boolean   @default(true)
+  isDefault       Boolean   @default(false)
+  
+  // Multi-agent routing (Fase 3 - Multi-agentes inteligentes)
+  triggerKeywords String[]  // Palavras que ativam este agente ["preço", "comprar"]
+  priority        Int       @default(0)  // 0=baixa, 10=alta (desempate)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  trainingData    TrainingData[]
+  conversations   Conversation[]
+  
+  @@index([companyId])
+  @@index([isActive])
+}
+
+enum TrainingType {
+  QA
+  DOCUMENT
+  PRODUCT
+  FAQ
+  SCRIPT
+  POLICY
+}
+
+model TrainingData {
+  id          String       @id @default(cuid())
+  
+  agentId     String
+  agent       AIAgent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  
+  type        TrainingType
+  title       String
+  content     String
+  
+  metadata    String?
+  
+  // URL do arquivo original (para enviar ao cliente quando solicitado)
+  fileUrl     String?
+  fileName    String?
+  
+  // RAG: Status do embedding
+  embeddingStatus  String  @default("pending") // pending, processing, completed, error
+  
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  embeddings  TrainingEmbedding[]
+  
+  @@index([agentId])
+  @@index([type])
+  @@index([embeddingStatus])
+}
+
+// RAG: Embeddings para busca semântica
+model TrainingEmbedding {
+  id            String        @id @default(cuid())
+  
+  trainingId    String
+  training      TrainingData  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  
+  chunkIndex    Int           // Ordem do chunk no documento original
+  chunkText     String        // Texto do chunk (~500 tokens)
+  embedding     String        // JSON array do vetor (1536 dims) - PostgreSQL não tem tipo Float[] nativo
+  
+  createdAt     DateTime      @default(now())
+  
+  @@index([trainingId])
+}
+
+// ========================
+// CONVERSATIONS
+// ========================
+
+enum ConversationStatus {
+  OPEN
+  AI_HANDLING
+  HUMAN_HANDLING
+  CLOSED
+}
+
+model Conversation {
+  id              String             @id @default(cuid())
+  
+  companyId       String
+  company         Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessionId       String
+  session         WhatsAppSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  agentId         String?
+  agent           AIAgent?           @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  
+  customerPhone   String             // Número limpo (sem sufixo)
+  customerWhatsAppId String?         // ID original do WhatsApp (@lid ou @c.us)
+  customerName    String?
+  customerAvatar  String?
+  
+  status          ConversationStatus @default(OPEN)
+  unreadCount     Int                @default(0)
+  
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  lastMessageAt   DateTime           @default(now())
+  
+  messages        Message[]
+  interests       CustomerInterest[]
+  orders          Order[]
+  
+  // Many-to-many with Tags
+  tags            Tag[]
+  
+  // Assigned team member (Fase 3.3)
+  assignedToId    String?
+  assignedTo      User?   @relation("AssignedConversations", fields: [assignedToId], references: [id], onDelete: SetNull)
+  
+  @@unique([sessionId, customerPhone])
+  @@index([companyId])
+  @@index([status])
+  @@index([lastMessageAt])
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  STICKER
+}
+
+enum MessageSender {
+  CUSTOMER
+  AI
+  HUMAN
+}
+
+model Message {
+  id              String        @id @default(cuid())
+  
+  conversationId  String
+  conversation    Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sentByUserId    String?
+  sentByUser      User?         @relation("SentByUser", fields: [sentByUserId], references: [id], onDelete: SetNull)
+  
+  type            MessageType   @default(TEXT)
+  content         String
+  mediaUrl        String?
+  
+  sender          MessageSender
+  isRead          Boolean       @default(false)
+  
+  createdAt       DateTime      @default(now())
+  
+  @@index([conversationId])
+  @@index([createdAt])
+  @@index([type])
+  @@index([sender])
+}
+
+// ========================
+// USAGE & ANALYTICS
+// ========================
+
+model TokenUsage {
+  id            String   @id @default(cuid())
+  
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  month         DateTime
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  totalCost     Float    @default(0)
+  
+  @@unique([companyId, month])
+  @@index([month])
+}
+
+// ========================
+// AUDIT
+// ========================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  
+  action      String
+  entity      String
+  entityId    String?
+  changes     String?
+  userEmail   String?
+  ipAddress   String?
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([companyId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+// ========================
+// SYSTEM LOGS (Errors, Warnings, etc)
+// ========================
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARNING
+  ERROR
+  SECURITY
+}
+
+enum LogCategory {
+  API
+  WHATSAPP
+  AUTH
+  PAYMENT
+  AI
+  WEBHOOK
+  CRON
+  SYSTEM
+}
+
+model SystemLog {
+  id          String      @id @default(cuid())
+  level       LogLevel
+  category    LogCategory
+  message     String
+  context     String?     // JSON com dados adicionais
+  stack       String?     // Stack trace para erros
+  
+  route       String?     // Ex: /api/orders
+  method      String?     // GET, POST, PATCH, DELETE
+  statusCode  Int?        // 200, 400, 500
+  duration    Int?        // ms de execução
+  
+  userId      String?
+  userEmail   String?
+  companyId   String?
+  company     Company?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  
+  ipAddress   String?
+  userAgent   String?
+  
+  createdAt   DateTime    @default(now())
+  
+  @@index([level])
+  @@index([category])
+  @@index([companyId])
+  @@index([createdAt])
+}
+
+// ========================
+// CUSTOMER INTERESTS
+// ========================
+
+enum InterestStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  LOST
+}
+
+model CustomerInterest {
+  id              String         @id @default(cuid())
+  
+  companyId       String
+  company         Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  conversationId  String
+  conversation    Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  productName     String
+  details         String?
+  customerPhone   String
+  customerName    String?
+  
+  status          InterestStatus @default(NEW)
+  
+  // Scoring fields (Fase 3.4)
+  priority        Int            @default(3)  // 1=Low, 2=Medium-Low, 3=Medium, 4=High, 5=Hot
+  estimatedValue  Float?                      // Valor estimado do lead (R$)
+  source          String?                     // "CHAT" | "CAMPAIGN" | "MANUAL"
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  
+  @@index([companyId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+// ========================
+// ORDERS / SALES
+// ========================
+
+enum OrderStatus {
+  AWAITING_PAYMENT
+  PROOF_SENT
+  VERIFIED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model Order {
+  id              String       @id @default(cuid())
+  
+  companyId       String
+  company         Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  customerPhone   String
+  customerName    String?
+  
+  productName     String
+  productPrice    Float
+  quantity        Int          @default(1)
+  totalAmount     Float
+  
+  pixKey          String
+  pixKeyType      String?
+  
+  // Tipo de entrega
+  deliveryType    String?      // "DELIVERY" | "PICKUP"
+  
+  // Endereço de entrega (quando deliveryType = DELIVERY)
+  deliveryAddress String?      @db.Text
+  deliveryCep     String?
+  deliveryCity    String?
+  deliveryState   String?
+  deliveryFee     Float?       @default(0)
+  
+  // Observações do cliente
+  customerNotes   String?      @db.Text
+  
+  status          OrderStatus  @default(AWAITING_PAYMENT)
+  paymentProof    String?
+  paymentMethod   String?      // "PIX" | "DINHEIRO" | "CARTAO" | "NA_ENTREGA"
+  notes           String?
+  
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  paidAt          DateTime?
+  verifiedAt      DateTime?
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  
+  // Relação com produto (opcional, para quando tiver product cadastrado)
+  productId       String?
+  product         Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  
+  // Histórico de alterações
+  history         OrderHistory[]
+  
+  @@index([companyId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([deliveryType])
+}
+
+// ========================
+// ORDER HISTORY (Fase 3.6)
+// ========================
+
+model OrderHistory {
+  id            String      @id @default(cuid())
+  
+  orderId       String
+  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  action        String      // "STATUS_CHANGE" | "NOTE_ADDED" | "PAYMENT_CONFIRMED" | "SHIPPED" | "DELIVERED"
+  previousStatus String?    // Status anterior
+  newStatus     String?     // Novo status
+  
+  notes         String?     // Observações
+  authorName    String?     // Nome do usuário que fez a alteração
+  
+  createdAt     DateTime    @default(now())
+  
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+// ========================
+// PRODUCTS & CATEGORIES
+// ========================
+
+model Category {
+  id          String    @id @default(cuid())
+  
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  name        String
+  description String?
+  color       String?   // Cor para UI (hex)
+  icon        String?   // Nome do ícone
+  order       Int       @default(0)  // Ordem de exibição
+  
+  isActive    Boolean   @default(true)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  products    Product[]
+  
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@index([isActive])
+}
+
+model Product {
+  id            String    @id @default(cuid())
+  
+  companyId     String
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  name          String
+  description   String?   @db.Text
+  price         Float
+  
+  // Imagem do produto (Cloudinary)
+  imageUrl      String?
+  imagePublicId String?   // ID do Cloudinary para deletar depois
+  
+  // Estoque
+  stockEnabled  Boolean   @default(false)
+  stockQuantity Int       @default(0)
+  
+  // Categoria (relação)
+  categoryId    String?
+  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  
+  // 👗 Campos específicos para Loja de Roupas
+  sizes         String[]  @default([])  // ["P", "M", "G", "GG"]
+  colors        String[]  @default([])  // ["Preto", "Branco", "Azul"]
+  material      String?                 // "100% Algodão"
+  sku           String?                 // Código do produto
+  gender        String?                 // "Masculino", "Feminino", "Unissex"
+  
+  isActive      Boolean   @default(true)
+  
+  // Destaque e Promoção (Fase 3.5)
+  isFeatured    Boolean   @default(false)  // Produto em destaque
+  isPromo       Boolean   @default(false)  // Em promoção
+  promoPrice    Float?                     // Preço promocional
+  promoEndsAt   DateTime?                  // Fim da promoção
+  
+  // Extração automática via IA
+  extractedFromAI   Boolean   @default(false)  // Indica que foi extraído automaticamente
+  needsReview       Boolean   @default(false)  // Indica que precisa de revisão humana
+  sourceDocumentId  String?                     // ID do TrainingData de origem (se extraído)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  orders        Order[]
+  
+  @@index([companyId])
+  @@index([isActive])
+  @@index([categoryId])
+  @@index([needsReview])
+}
+
+// ========================
+// SYSTEM SETTINGS
+// ========================
+
+model SystemSettings {
+  id          String   @id @default(cuid())
+  
+  key         String   @unique  // e.g. "openaiModel", "webhookUrl", etc.
+  value       String   @db.Text // JSON or plain value
+  description String?           // Human-readable description
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([key])
+}
+
+// ========================
+// CUSTOMER MEMORY
+// ========================
+
+model CustomerMemory {
+  id              String   @id @default(cuid())
+  
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  customerPhone   String   // Identifica o cliente (número limpo)
+  
+  // Memória persistente
+  summary         String   @db.Text  // Resumo geral do histórico com esse cliente
+  preferences     String?  @db.Text  // Preferências detectadas (JSON)
+  lastProducts    String?  @db.Text  // Últimos produtos/serviços de interesse
+  tags            String?             // Tags separadas por vírgula
+  
+  // Métricas
+  totalConversations Int    @default(1)
+  totalMessages      Int    @default(0)
+  lastContactAt      DateTime @default(now())
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([companyId, customerPhone])
+  @@index([companyId])
+  @@index([customerPhone])
+}
+
+// ========================
+// CUSTOMER NOTES (Manual notes by attendants)
+// ========================
+
+model CustomerNote {
+  id              String   @id @default(cuid())
+  
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  customerPhone   String   // Identifica o cliente
+  customerName    String?  // Cached name
+  
+  content         String   @db.Text
+  authorName      String?  // Nome do atendente
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([companyId])
+  @@index([customerPhone])
+  @@index([createdAt])
+}
+
+// ========================
+// WEBHOOKS
+// ========================
+
+enum WebhookEvent {
+  NEW_CONVERSATION      // Nova conversa iniciada
+  MESSAGE_RECEIVED      // Mensagem recebida do cliente
+  SALE_COMPLETED        // Venda concluída
+  CUSTOMER_INTEREST     // Interesse registrado
+  HUMAN_TRANSFER        // Transferência para humano
+  CONVERSATION_CLOSED   // Conversa encerrada
+  MEETING_SCHEDULED     // Reunião agendada
+  CONSULTATION_BOOKED   // Consulta marcada
+  QUOTE_REQUESTED       // Orçamento solicitado
+  APPOINTMENT_REMINDER  // Lembrete de agendamento
+  PAYMENT_RECEIVED      // Pagamento recebido
+  LEAD_CAPTURED         // Lead capturado
+}
+
+model Webhook {
+  id            String        @id @default(cuid())
+  
+  companyId     String
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  name          String        // Nome amigável (ex: "CRM Integration")
+  url           String        // URL de destino (https://api.crm.com/webhook)
+  secret        String?       // Chave secreta para validação (HMAC)
+  
+  // Eventos que disparam este webhook
+  events        String        // JSON array de WebhookEvent: ["NEW_CONVERSATION", "SALE_COMPLETED"]
+  
+  // Configurações
+  isActive      Boolean       @default(true)
+  retryCount    Int           @default(3)   // Tentativas em caso de falha
+  timeoutMs     Int           @default(5000) // Timeout em ms
+  
+  // Headers customizados (JSON)
+  headers       String?       // {"Authorization": "Bearer xxx"}
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  logs          WebhookLog[]
+  
+  @@index([companyId])
+  @@index([isActive])
+}
+
+model WebhookLog {
+  id            String    @id @default(cuid())
+  
+  webhookId     String
+  webhook       Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  
+  event         String    // Evento que disparou
+  payload       String    @db.Text  // JSON enviado
+  
+  // Resposta
+  statusCode    Int?      // HTTP status code
+  response      String?   @db.Text  // Response body
+  
+  // Status
+  success       Boolean   @default(false)
+  attempts      Int       @default(1)
+  error         String?   // Mensagem de erro se houver
+  
+  createdAt     DateTime  @default(now())
+  
+  @@index([webhookId])
+  @@index([success])
+  @@index([createdAt])
+}
+
+// ========================
+// CAMPAIGNS (Mass Messaging)
+// ========================
+
+enum CampaignStatus {
+  DRAFT           // Rascunho
+  SCHEDULED       // Agendada
+  RUNNING         // Em execução
+  PAUSED          // Pausada
+  COMPLETED       // Concluída
+  CANCELLED       // Cancelada
+}
+
+enum RecipientStatus {
+  PENDING         // Aguardando envio
+  SENDING         // Enviando (digitando)
+  SENT            // Enviada
+  DELIVERED       // Entregue
+  READ            // Lida
+  REPLIED         // Respondida
+  FAILED          // Falhou
+  OPTED_OUT       // Pediu para sair
+  SKIPPED         // Pulado (contato frio/bloqueado)
+}
+
+enum ContactSegment {
+  HOT             // Comprou nos últimos 30 dias
+  WARM            // Conversou mas não comprou
+  INACTIVE        // Sem mensagem há 30-60 dias
+  COLD            // Sem interação há 60-120 dias
+  FROZEN          // Sem interação há 120+ dias
+  VIP             // Clientes especiais
+}
+
+model Campaign {
+  id               String          @id @default(cuid())
+  
+  companyId        String
+  company          Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  name             String          // Nome da campanha
+  originalMessage  String          @db.Text // Mensagem original do usuário
+  variations       String[]        // Variações geradas pela IA
+  
+  // Segmentação
+  targetSegments   String[]        // ["HOT", "WARM"]
+  
+  // Status
+  status           CampaignStatus  @default(DRAFT)
+  
+  // Agendamento
+  scheduledAt      DateTime?
+  startedAt        DateTime?
+  pausedAt         DateTime?
+  completedAt      DateTime?
+  
+  // Estatísticas
+  totalRecipients  Int             @default(0)
+  sentCount        Int             @default(0)
+  deliveredCount   Int             @default(0)
+  readCount        Int             @default(0)
+  repliedCount     Int             @default(0)
+  failedCount      Int             @default(0)
+  optOutCount      Int             @default(0)
+  
+  // Configurações anti-ban
+  settings         Json            @default("{}")
+  // {
+  //   minDelay: 8,
+  //   maxDelay: 30,
+  //   pauseEvery: 15,
+  //   pauseDuration: 60,
+  //   dailyLimit: 100,
+  //   simulateTyping: true
+  // }
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  recipients       CampaignRecipient[]
+  
+  @@index([companyId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model CampaignRecipient {
+  id               String          @id @default(cuid())
+  
+  campaignId       String
+  campaign         Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  phone            String
+  contactName      String?
+  
+  // Qual variação de mensagem foi usada (índice do array)
+  variationIndex   Int             @default(0)
+  
+  // Status
+  status           RecipientStatus @default(PENDING)
+  
+  // Timestamps
+  scheduledAt      DateTime?
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  readAt           DateTime?
+  repliedAt        DateTime?
+  
+  // Erro se falhou
+  error            String?
+  
+  createdAt        DateTime        @default(now())
+  
+  @@unique([campaignId, phone])
+  @@index([campaignId])
+  @@index([status])
+  @@index([phone])
+}
+
+model ContactPreference {
+  id               String          @id @default(cuid())
+  
+  companyId        String
+  company          Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  phone            String
+  
+  // Opt-out
+  optedOut         Boolean         @default(false)
+  optOutAt         DateTime?
+  optOutReason     String?
+  
+  // Segmentação automática
+  segment          ContactSegment  @default(WARM)
+  
+  // Engajamento (0-100)
+  engagementScore  Int             @default(50)
+  
+  // Permissões
+  canReceiveBroadcast Boolean      @default(true)
+  
+  // Histórico
+  lastInteractionAt DateTime?
+  lastPurchaseAt    DateTime?
+  totalPurchases    Int             @default(0)
+  totalMessages     Int             @default(0)
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  @@unique([companyId, phone])
+  @@index([companyId])
+  @@index([segment])
+  @@index([optedOut])
+}
+
+// ========================
+// CONTACT TAGS (Fase 3.11)
+// ========================
+
+model ContactTag {
+  id            String   @id @default(cuid())
+  
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  phone         String   // Phone do contato
+  tagId         String   // ID da tag (modelo Tag)
+  tag           Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime @default(now())
+  
+  @@unique([companyId, phone, tagId])
+  @@index([companyId])
+  @@index([phone])
+  @@index([tagId])
+}
+
+// ========================
+// MESSAGE TEMPLATES
+// ========================
+
+enum TemplateCategory {
+  WELCOME         // Boas-vindas
+  FOLLOW_UP       // Acompanhamento
+  PROMO           // Promoções
+  RECOVERY        // Recuperação de cliente
+  REMINDER        // Lembretes
+  THANKS          // Agradecimentos
+  CUSTOM          // Personalizado
+}
+
+model MessageTemplate {
+  id               String           @id @default(cuid())
+  
+  companyId        String
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  name             String           // Nome do template
+  content          String           @db.Text // Conteúdo com variáveis {nome}, {produto}, etc.
+  category         TemplateCategory @default(CUSTOM)
+  
+  // Variáveis disponíveis
+  variables        String[]         // ["nome", "produto", "valor"]
+  
+  isActive         Boolean          @default(true)
+  usageCount       Int              @default(0)
+  
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@index([category])
+}
+
+// ========================
+// AUTO RECOVERY CONFIG
+// ========================
+
+model AutoRecoveryConfig {
+  id               String    @id @default(cuid())
+  
+  companyId        String    @unique
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  // Configurações
+  enabled          Boolean   @default(false)
+  
+  // Dias de inatividade para disparo
+  inactiveDays     Int       @default(30)
+  
+  // Mensagem a enviar (pode usar variáveis)
+  message          String    @db.Text
+  
+  // Horário permitido (formato HH:mm)
+  startHour        Int       @default(9)   // 9h
+  endHour          Int       @default(21)  // 21h
+  
+  // Dias da semana (0=dom, 1=seg, ..., 6=sab)
+  activeDays       Int[]     @default([1, 2, 3, 4, 5]) // Seg-Sex
+  
+  // Limite diário
+  dailyLimit       Int       @default(50)
+  
+  // Última execução
+  lastRunAt        DateTime?
+  lastRunCount     Int       @default(0)
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+
+// ========================
+// LUMUS SUPPORT SYSTEM
+// ========================
+
+enum SupportTicketStatus {
+  AI_HANDLING      // IA está atendendo
+  HUMAN_HANDLING   // Suporte humano assumiu
+  WAITING_USER     // Aguardando resposta do usuário
+  RESOLVED         // Resolvido
+}
+
+enum SupportTicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model SupportTicket {
+  id          String                @id @default(cuid())
+  
+  companyId   String
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  status      SupportTicketStatus   @default(AI_HANDLING)
+  priority    SupportTicketPriority @default(NORMAL)
+  category    String?               // BILLING, TECHNICAL, FEATURE, BUG, OTHER
+  subject     String?               // Assunto resumido pelo AI
+  
+  // Admin que assumiu (se escalado)
+  assignedToId String?
+  
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  resolvedAt  DateTime?
+  
+  messages    SupportMessage[]
+  
+  @@index([companyId])
+  @@index([userId])
+  @@index([status])
+  @@index([priority])
+}
+
+model SupportMessage {
+  id          String         @id @default(cuid())
+  
+  ticketId    String
+  ticket      SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  
+  sender      String         // USER, AI, ADMIN
+  content     String         @db.Text
+  
+  // Se a IA executou alguma ação
+  actionType  String?        // RECONNECT_WHATSAPP, OPEN_PAGE, etc.
+  actionData  String?        // JSON com dados da ação
+  
+  createdAt   DateTime       @default(now())
+  
+  @@index([ticketId])
+}
+
+// Base de conhecimento para a IA de suporte
+model SupportKnowledge {
+  id          String   @id @default(cuid())
+  
+  category    String   // GETTING_STARTED, WHATSAPP, AGENTS, PRODUCTS, BILLING, etc.
+  question    String   @db.Text
+  answer      String   @db.Text
+  keywords    String   // Palavras-chave separadas por vírgula
+  
+  isActive    Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([category])
+  @@index([isActive])
+}
+
+// ========================
+// GOOGLE CALENDAR INTEGRATION
+// ========================
+
+model GoogleCalendarIntegration {
+  id              String   @id @default(cuid())
+  companyId       String   @unique
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  // OAuth Tokens
+  accessToken     String   @db.Text
+  refreshToken    String   @db.Text
+  expiresAt       DateTime
+  calendarId      String   @default("primary")
+  calendarEmail   String?  // Email da conta conectada
+  
+  // Configurações por Nicho
+  defaultDuration Int      @default(60)  // minutos
+  bufferTime      Int      @default(15)  // minutos entre eventos
+  reminders       String   @default("[1440, 60]") // minutos antes (24h, 1h)
+  
+  // Horários de Funcionamento
+  workDays        String   @default("[1,2,3,4,5]") // 0=Dom, 1=Seg...
+  workStart       String   @default("09:00")
+  workEnd         String   @default("18:00")
+  lunchStart      String?  @default("12:00")
+  lunchEnd        String?  @default("13:00")
+  
+  // Automatizações
+  autoAddMeetLink Boolean  @default(true)  // Criar Google Meet automaticamente
+  autoConfirm     Boolean  @default(false) // Confirmar eventos automaticamente
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Appointment {
+  id              String   @id @default(cuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  // Cliente
+  customerPhone   String
+  customerName    String?
+  customerEmail   String?
+  conversationId  String?
+  
+  // Evento
+  title           String
+  description     String?  @db.Text
+  type            AppointmentType @default(MEETING)
+  
+  // Tempo
+  startTime       DateTime
+  endTime         DateTime
+  duration        Int      // minutos
+  timezone        String   @default("America/Sao_Paulo")
+  
+  // Google Integration
+  googleEventId   String?
+  meetLink        String?  // Link do Google Meet
+  
+  // Status
+  status          AppointmentStatus @default(PENDING)
+  
+  // Específicos por Nicho
+  location        String?  // Para visitas, ensaios
+  serviceType     String?  // Tipo de serviço específico
+  professional    String?  // Nome do profissional
+  notes           String?  @db.Text
+  attachments     String?  @db.Text // JSON com links
+  
+  // Lembrete
+  reminderSent    Boolean  @default(false)
+  confirmationSent Boolean @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([companyId, startTime])
+  @@index([status])
+  @@index([customerPhone])
+  @@index([googleEventId])
+}
+
+enum AppointmentType {
+  MEETING           // Reunião geral
+  CONSULTATION      // Consulta médica/profissional
+  SERVICE           // Serviço (salão, barbearia)
+  VISIT             // Visita (imobiliária)
+  SESSION           // Sessão (psicólogo, ensaio)
+  TRAINING          // Treino/Aula
+  BRIEFING          // Briefing (agência)
+  PROPOSAL          // Proposta/Orçamento
+  FOLLOWUP          // Retorno/Follow-up
+}
+
+enum AppointmentStatus {
+  PENDING           // Aguardando confirmação
+  CONFIRMED         // Confirmado
+  RESCHEDULED       // Reagendado
+  CANCELLED         // Cancelado pelo cliente
+  CANCELLED_COMPANY // Cancelado pela empresa
+  COMPLETED         // Realizado
+  NO_SHOW           // Cliente não compareceu
+  IN_PROGRESS       // Em andamento
+}

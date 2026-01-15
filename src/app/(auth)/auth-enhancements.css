@@ -1,0 +1,327 @@
+/* ============================================
+   AUTH PAGES - ENHANCEMENTS & POLISH
+   ============================================ */
+
+/* === Smooth Scroll === */
+html {
+    scroll-behavior: smooth;
+}
+
+/* === Prevent Horizontal Overflow === */
+body {
+    overflow-x: hidden;
+}
+
+.auth-page * {
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+/* === Input Focus Enhancements === */
+.auth-input {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Text/email/password inputs get scale effect */
+input[type="text"].auth-input:focus,
+input[type="email"].auth-input:focus,
+input[type="password"].auth-input:focus,
+input[type="tel"].auth-input:focus {
+    transform: scale(1.01);
+    box-shadow:
+        0 0 0 4px var(--auth-accent-glow),
+        0 4px 12px rgba(16, 185, 129, 0.15);
+}
+
+/* Select and textarea NO scale effect */
+select.auth-input:focus,
+textarea.auth-input:focus {
+    transform: none;
+    box-shadow: 0 0 0 4px var(--auth-accent-glow);
+}
+
+/* === Icon Animation on Focus === */
+.auth-input-icon {
+    transition: all 0.3s ease;
+}
+
+.auth-input:focus+.auth-input-icon {
+    color: #10b981;
+    transform: scale(1.1);
+}
+
+/* === Button Ripple Effect === */
+.auth-submit {
+    position: relative;
+    overflow: hidden;
+}
+
+.auth-submit::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s ease, height 0.6s ease;
+}
+
+.auth-submit:active::after {
+    width: 300px;
+    height: 300px;
+}
+
+/* === Error Shake Animation === */
+@keyframes shake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+        transform: translateX(-4px);
+    }
+
+    20%,
+    40%,
+    60%,
+    80% {
+        transform: translateX(4px);
+    }
+}
+
+.auth-error {
+    animation: shake 0.5s ease-in-out, fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* === Mobile Optimizations === */
+@media (max-width: 640px) {
+    .auth-card {
+        padding: 2rem 1.5rem;
+    }
+
+    .auth-input {
+        font-size: 16px;
+        padding: 0.875rem 0.875rem 0.875rem 3rem;
+    }
+
+    /* NO scale effect on mobile */
+    .auth-input:focus {
+        transform: none !important;
+    }
+
+    .auth-submit {
+        padding: 1rem 1.5rem;
+        font-size: 0.95rem;
+    }
+
+    .auth-mobile-header {
+        margin-bottom: 2rem;
+    }
+
+    .auth-mobile-logo {
+        width: 56px;
+        height: 56px;
+    }
+
+    .auth-mobile-logo svg {
+        width: 28px;
+        height: 28px;
+    }
+
+    .auth-mobile-title {
+        font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 375px) {
+    .auth-card {
+        padding: 1.75rem 1.25rem;
+    }
+
+    .auth-card-title {
+        font-size: 1.25rem;
+    }
+
+    .auth-form {
+        gap: 1rem;
+    }
+}
+
+/* === Touch Device Optimizations === */
+@media (hover: none) and (pointer: coarse) {
+    .auth-submit {
+        min-height: 48px;
+    }
+
+    .auth-input {
+        min-height: 44px;
+    }
+
+    .auth-submit:hover {
+        transform: none;
+    }
+
+    .auth-submit:active {
+        transform: scale(0.98);
+    }
+}
+
+/* === Accessibility === */
+.auth-input:focus-visible {
+    outline: 2px solid #10b981;
+    outline-offset: 2px;
+}
+
+.auth-submit:focus-visible {
+    outline: 2px solid #10b981;
+    outline-offset: 2px;
+}
+
+/* === Select Dropdown Enhancement === */
+select.auth-input {
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M6 9L1 4h10z'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 1rem center !important;
+    padding-right: 2.5rem;
+    background-color: rgba(17, 24, 39, 0.9) !important;
+    color: #e2e8f0 !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+}
+
+select.auth-input:focus {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2310b981' d='M6 9L1 4h10z'/%3E%3C/svg%3E") !important;
+    background-color: rgba(17, 24, 39, 0.95) !important;
+}
+
+/* Fix options background - cross browser */
+select.auth-input option {
+    background-color: #1e293b !important;
+    color: #e2e8f0 !important;
+    padding: 0.75rem !important;
+}
+
+select.auth-input option:hover,
+select.auth-input option:focus,
+select.auth-input option:checked {
+    background-color: #334155 !important;
+    color: #ffffff !important;
+}
+
+/* === Light Mode Select Dropdown === */
+[data-theme="light"] select.auth-input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 9L1 4h10z'/%3E%3C/svg%3E") !important;
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    color: #1e293b !important;
+    border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] select.auth-input:focus {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23059669' d='M6 9L1 4h10z'/%3E%3C/svg%3E") !important;
+    background-color: #ffffff !important;
+    border-color: rgba(5, 150, 105, 0.4) !important;
+}
+
+[data-theme="light"] select.auth-input option {
+    background-color: #ffffff !important;
+    color: #1e293b !important;
+}
+
+[data-theme="light"] select.auth-input option:hover,
+[data-theme="light"] select.auth-input option:focus,
+[data-theme="light"] select.auth-input option:checked {
+    background-color: #e2e8f0 !important;
+    color: #1e293b !important;
+}
+
+/* === Textarea === */
+textarea.auth-input {
+    font-family: inherit;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 70px;
+}
+
+/* === Grid Layout Mobile === */
+@media (max-width: 1023px) {
+    .auth-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+}
+
+/* === Background Blob Animation === */
+.auth-bg-blob {
+    animation: blobFloat 20s ease-in-out infinite;
+}
+
+.auth-bg-blob.top-right {
+    animation-delay: 0s;
+}
+
+.auth-bg-blob.bottom-left {
+    animation-delay: 5s;
+}
+
+.auth-bg-blob.center {
+    animation-delay: 10s;
+}
+
+@keyframes blobFloat {
+
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+
+    25% {
+        transform: translate(30px, -30px) scale(1.05);
+    }
+
+    50% {
+        transform: translate(-20px, 20px) scale(0.95);
+    }
+
+    75% {
+        transform: translate(20px, 30px) scale(1.02);
+    }
+}
+
+/* === Reduced Motion Support === */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    html {
+        scroll-behavior: auto;
+    }
+}

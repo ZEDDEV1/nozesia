@@ -1,0 +1,145 @@
+# ============================================
+# Docker Compose - Produção
+# ============================================
+# Para deploy em VPS com todos os serviços
+#
+# USO:
+#   docker-compose -f docker-compose.prod.yml up -d
+# ============================================
+
+version: "3.8"
+
+services:
+  # ============================================
+  # App Next.js
+  # ============================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lumusai-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL}
+      - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}
+      - REDIS_URL=${REDIS_URL}
+      - WPPCONNECT_URL=${WPPCONNECT_URL}
+      - WPPCONNECT_SECRET=${WPPCONNECT_SECRET}
+      - SENTRY_DSN=${SENTRY_DSN}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - lumusai-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================
+  # Worker BullMQ
+  # ============================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lumusai-worker
+    restart: unless-stopped
+    command: ["node", "-r", "tsconfig-paths/register", "dist/lib/message-worker.js"]
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - WPPCONNECT_URL=${WPPCONNECT_URL}
+      - WPPCONNECT_SECRET=${WPPCONNECT_SECRET}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - lumusai-network
+
+  # ============================================
+  # PostgreSQL
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: lumusai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lumusai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lumusai123}
+      POSTGRES_DB: ${POSTGRES_DB:-lumusai}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - lumusai-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lumusai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis (para BullMQ e Cache local)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: lumusai-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - lumusai-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # WPPConnect Server
+  # ============================================
+  wppconnect:
+    image: wppconnect/server-cli:latest
+    container_name: lumusai-wppconnect
+    restart: unless-stopped
+    environment:
+      - WPPCONNECT_SECRET_KEY=${WPPCONNECT_SECRET:-your-secret-key}
+      - WPPCONNECT_WEBHOOK_URL=${NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook
+      - WPPCONNECT_WEBHOOK_ALLUNREADMESSAGES=true
+    volumes:
+      - wppconnect_tokens:/usr/src/wpp-server/tokens
+    ports:
+      - "21465:21465"
+    networks:
+      - lumusai-network
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  lumusai-network:
+    driver: bridge
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  postgres_data:
+  redis_data:
+  wppconnect_tokens:
