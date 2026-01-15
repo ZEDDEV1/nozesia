@@ -85,12 +85,14 @@ const getConnection = (): IORedis => {
 };
 
 // Queue para mensagens do WhatsApp
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let messageQueue: Queue<MessageQueueJob> | null = null;
 
 export const getMessageQueue = (): Queue<MessageQueueJob> => {
     if (!messageQueue) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         messageQueue = new Queue<MessageQueueJob>("whatsapp-messages", {
-            connection: getConnection(),
+            connection: getConnection() as any,
             defaultJobOptions: {
                 attempts: 3,
                 backoff: {
@@ -106,7 +108,7 @@ export const getMessageQueue = (): Queue<MessageQueueJob> => {
                     age: 86400, // Ou jobs com menos de 24 horas
                 },
             },
-        });
+        }) as Queue<MessageQueueJob>;
 
         logger.info("Message queue initialized");
     }

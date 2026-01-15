@@ -634,7 +634,8 @@ export function startWorker(): Worker<MessageQueueJob> {
             // Adicionar outros tipos de job aqui
         },
         {
-            connection: connection as unknown as import("bullmq").ConnectionOptions,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            connection: connection as any,
             concurrency: 5, // Processar 5 jobs em paralelo
             limiter: {
                 max: 10,
