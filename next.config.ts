@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   // ============================================
   // STANDALONE OUTPUT (para Docker)
   // ============================================
-  output: "standalone",
+  // output: "standalone", // Comentado - causa problemas com next start e Socket.IO
 
   // ============================================
   // SECURITY HEADERS
