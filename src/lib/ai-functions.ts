@@ -102,13 +102,15 @@ Use quando:
         type: "function" as const,
         function: {
             name: "registrarInteresse",
-            description: `Registra interesse do cliente em uma peça.
+            description: `🔴 OBRIGATÓRIO: SEMPRE registre interesse do cliente em peças!
 
-Use quando cliente demonstrar interesse:
-- "Gostei dessa blusa"
-- "Achei linda essa saia"
-- "Me interessa esse vestido"
-- Cliente pergunta várias vezes sobre mesma peça`,
+⚠️ VOCÊ DEVE CHAMAR ESTA FUNÇÃO quando cliente:
+- "Gostei dessa blusa" → CHAMAR registrarInteresse()
+- "Achei linda essa saia" → CHAMAR registrarInteresse()
+- "Me interessa esse vestido" → CHAMAR registrarInteresse()
+- Pergunta sobre uma peça específica várias vezes → CHAMAR registrarInteresse()
+
+NÃO apenas fale sobre registrar - EXECUTE a função!`,
             parameters: {
                 type: "object",
                 properties: {
@@ -129,18 +131,20 @@ Use quando cliente demonstrar interesse:
         type: "function" as const,
         function: {
             name: "processarVenda",
-            description: `Processa venda de roupa quando cliente confirma compra.
+            description: `🔴 OBRIGATÓRIO: SEMPRE processe a venda quando cliente confirmar compra!
 
-📝 FLUXO:
-1. Cliente confirma peça → registrar pedido
-2. Confirmar tamanho e cor
-3. Perguntar se quer mais alguma peça
-4. Informar que trabalhamos APENAS com RETIRADA NA LOJA
-5. Perguntar forma de pagamento (só pergunte se tiver PIX configurado)
+⚠️ VOCÊ DEVE CHAMAR ESTA FUNÇÃO quando cliente disser:
+- "Quero" → CHAMAR processarVenda()
+- "Vou levar" → CHAMAR processarVenda()
+- "Fecha" → CHAMAR processarVenda()
+- "Pode fazer" → CHAMAR processarVenda()
+- "Quero comprar" → CHAMAR processarVenda()
+- "Sim" (confirmando compra) → CHAMAR processarVenda()
 
-⚠️ IMPORTANTE: NÃO oferecemos entrega!
-
-Gatilhos: 'quero', 'vou levar', 'fecha', 'quero comprar', 'pode fazer'`,
+⚠️ IMPORTANTE:
+- NÃO oferecemos entrega, apenas RETIRADA NA LOJA!
+- Se não souber o preço, use buscarProduto() primeiro
+- NÃO apenas fale sobre registrar pedido - EXECUTE a função!`,
             parameters: {
                 type: "object",
                 properties: {
@@ -165,7 +169,7 @@ Gatilhos: 'quero', 'vou levar', 'fecha', 'quero comprar', 'pode fazer'`,
                         description: "Cor da peça"
                     }
                 },
-                required: ["produto", "preco"]
+                required: ["produto"]
             }
         }
     },
