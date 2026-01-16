@@ -234,3 +234,53 @@ export async function POST(request: Request, { params }: RouteParams) {
         return NextResponse.json(handleApiError(error), { status: 500 });
     }
 }
+
+// DELETE - Delete conversation and all messages
+export async function DELETE(request: Request, { params }: RouteParams) {
+    try {
+        const user = await getCurrentUser();
+        const { id } = await params;
+
+        if (!user || !user.companyId) {
+            return NextResponse.json(errorResponse("Não autorizado"), { status: 401 });
+        }
+
+        const conversation = await prisma.conversation.findFirst({
+            where: { id, companyId: user.companyId },
+        });
+
+        if (!conversation) {
+            return NextResponse.json(errorResponse("Conversa não encontrada"), { status: 404 });
+        }
+
+        // Delete all messages first (cascade should handle this, but let's be explicit)
+        await prisma.message.deleteMany({
+            where: { conversationId: id },
+        });
+
+        // Delete related orders
+        await prisma.order.deleteMany({
+            where: { conversationId: id },
+        });
+
+        // Delete related customer interests
+        await prisma.customerInterest.deleteMany({
+            where: { conversationId: id },
+        });
+
+        // Delete the conversation
+        await prisma.conversation.delete({
+            where: { id },
+        });
+
+        logger.info("[Conversations API] Conversation deleted", {
+            conversationId: id,
+            deletedBy: user.email
+        });
+
+        return NextResponse.json(successResponse({ deleted: true }, "Conversa excluída com sucesso!"));
+    } catch (error) {
+        logger.error("[Conversations API] Delete error", { error });
+        return NextResponse.json(handleApiError(error), { status: 500 });
+    }
+}

@@ -476,10 +476,11 @@ export default function ConversationsPage() {
         setBulkMode(false);
     };
 
-    const executeBulkAction = async (action: "close" | "archive" | "markRead") => {
+    const executeBulkAction = async (action: "close" | "archive" | "markRead" | "delete") => {
         if (selectedConvIds.size === 0) return;
 
-        const confirm = window.confirm(`Executar ação em ${selectedConvIds.size} conversa(s)?`);
+        const actionLabel = action === "delete" ? "EXCLUIR" : "executar ação em";
+        const confirm = window.confirm(`${actionLabel} ${selectedConvIds.size} conversa(s)? ${action === "delete" ? "Esta ação não pode ser desfeita!" : ""}`);
         if (!confirm) return;
 
         setBulkActionLoading(true);
@@ -500,6 +501,10 @@ export default function ConversationsPage() {
                 } else if (action === "markRead") {
                     await fetch(`/api/conversations/${convId}/read`, {
                         method: "POST",
+                    });
+                } else if (action === "delete") {
+                    await fetch(`/api/conversations/${convId}`, {
+                        method: "DELETE",
                     });
                 }
             });
@@ -746,6 +751,23 @@ export default function ConversationsPage() {
                                             }}
                                         >
                                             ✕ Fechar
+                                        </button>
+                                        <button
+                                            onClick={() => executeBulkAction("delete")}
+                                            disabled={bulkActionLoading || selectedConvIds.size === 0}
+                                            style={{
+                                                padding: "4px 8px",
+                                                fontSize: 10,
+                                                borderRadius: 4,
+                                                border: "none",
+                                                background: "rgba(220, 38, 38, 0.3)",
+                                                color: "#ef4444",
+                                                cursor: selectedConvIds.size === 0 ? "not-allowed" : "pointer",
+                                                opacity: selectedConvIds.size === 0 ? 0.5 : 1,
+                                                fontWeight: 600,
+                                            }}
+                                        >
+                                            🗑️ Excluir
                                         </button>
                                         <button
                                             onClick={clearSelection}

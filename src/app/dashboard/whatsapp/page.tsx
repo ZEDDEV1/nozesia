@@ -14,7 +14,8 @@ import {
     Power,
     PowerOff,
     Lock,
-    Crown
+    Crown,
+    Trash2
 } from "lucide-react";
 import ExtraPurchaseModal from "@/components/ExtraPurchaseModal";
 
@@ -192,6 +193,26 @@ export default function WhatsAppPage() {
             }
         } catch {
             setError("Erro ao desconectar");
+        }
+    };
+
+    const handleDeleteSession = async (sessionId: string) => {
+        if (!confirm("⚠️ ATENÇÃO!\n\nIsso irá EXCLUIR permanentemente:\n• O número do WhatsApp\n• Todas as conversas deste número\n• Todas as mensagens\n• Todos os pedidos relacionados\n\nEsta ação NÃO pode ser desfeita!\n\nDeseja continuar?")) return;
+
+        try {
+            const response = await fetch(`/api/whatsapp/sessions/${sessionId}`, {
+                method: "DELETE",
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                fetchSessions();
+            } else {
+                setError(data.error || "Erro ao excluir sessão");
+            }
+        } catch {
+            setError("Erro ao excluir sessão");
         }
     };
 
@@ -408,6 +429,18 @@ export default function WhatsAppPage() {
                                         Conectar
                                     </button>
                                 )}
+                                <button
+                                    className="dash-btn sm"
+                                    onClick={() => handleDeleteSession(session.id)}
+                                    title="Excluir número"
+                                    style={{
+                                        background: 'rgba(220, 38, 38, 0.15)',
+                                        color: '#ef4444',
+                                        border: '1px solid rgba(220, 38, 38, 0.3)',
+                                    }}
+                                >
+                                    <Trash2 />
+                                </button>
                             </div>
                         </div>
                     </div>

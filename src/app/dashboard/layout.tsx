@@ -21,6 +21,7 @@ import {
     Send,
     FileText,
     Shirt,
+    Clock,
 } from "lucide-react";
 import "./globals-dashboard.css";
 import { EmailVerificationBanner } from "@/components/email-verification-banner";
@@ -54,6 +55,7 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
     { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { href: "/dashboard/conversations", icon: MessageCircle, label: "Conversas" },
+    { href: "/dashboard/awaiting-response", icon: Clock, label: "Esperando Resposta" },
     { href: "/dashboard/agents", icon: Bot, label: "Agente IA" },
     { href: "/dashboard/products", icon: Package, label: "Produtos" },
     { href: "/dashboard/orders", icon: ShoppingCart, label: "Pedidos" },

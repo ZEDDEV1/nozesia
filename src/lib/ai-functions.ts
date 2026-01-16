@@ -135,9 +135,10 @@ Use quando cliente demonstrar interesse:
 1. Cliente confirma peça → registrar pedido
 2. Confirmar tamanho e cor
 3. Perguntar se quer mais alguma peça
-4. Perguntar: "Entrega ou retirada na loja?"
-5. Se entrega → pedir CEP para calcular frete
-6. Perguntar forma de pagamento: PIX ou na entrega
+4. Informar que trabalhamos APENAS com RETIRADA NA LOJA
+5. Perguntar forma de pagamento (só pergunte se tiver PIX configurado)
+
+⚠️ IMPORTANTE: NÃO oferecemos entrega!
 
 Gatilhos: 'quero', 'vou levar', 'fecha', 'quero comprar', 'pode fazer'`,
             parameters: {
@@ -256,40 +257,25 @@ Use quando cliente pedir:
         type: "function" as const,
         function: {
             name: "coletarEnderecoEntrega",
-            description: `Coleta endereço para entrega de roupas.
+            description: `Informa sobre retirada na loja.
 
-📍 FLUXO:
-1. Pergunte: "É para entrega ou retirada na loja?"
-2. Se ENTREGA → Peça CEP e endereço completo
-3. Calcule o frete e informe ao cliente
-4. Se RETIRADA → Confirme endereço da loja`,
+⚠️ IMPORTANTE: Trabalhamos APENAS com RETIRADA NA LOJA!
+NÃO fazemos entrega!
+
+Use quando cliente perguntar sobre:
+- "Vocês entregam?"
+- "Faz entrega?"
+- "Qual o frete?"
+- "Como recebo o produto?"
+
+Resposta padrão: "Trabalhamos apenas com retirada na loja!"`,
             parameters: {
                 type: "object",
                 properties: {
                     tipoEntrega: {
                         type: "string",
-                        enum: ["DELIVERY", "PICKUP"],
-                        description: "DELIVERY = entrega | PICKUP = retirada na loja"
-                    },
-                    cep: {
-                        type: "string",
-                        description: "CEP do cliente (para calcular frete)"
-                    },
-                    endereco: {
-                        type: "string",
-                        description: "Rua/Avenida"
-                    },
-                    numero: {
-                        type: "string",
-                        description: "Número"
-                    },
-                    complemento: {
-                        type: "string",
-                        description: "Apartamento, bloco, etc"
-                    },
-                    bairro: {
-                        type: "string",
-                        description: "Bairro"
+                        enum: ["PICKUP"],
+                        description: "Sempre PICKUP - trabalhamos só com retirada"
                     }
                 },
                 required: ["tipoEntrega"]
@@ -1094,286 +1080,85 @@ async function enviarDocumento(
 }
 
 /**
- * Coleta endereço de entrega para NEGÓCIOS LOCAIS
- * Busca taxa de entrega pelo bairro na tabela DeliveryZone
+ * Informa sobre retirada - NÃO FAZEMOS ENTREGA!
+ * Sistema apenas com retirada na loja
  */
 async function coletarEnderecoEntrega(
-    args: Record<string, unknown>,
+    _args: Record<string, unknown>,
     context: FunctionContext
 ): Promise<FunctionResult> {
-    const tipoEntrega = args.tipoEntrega as string;
-    const bairro = (args.bairro as string || "").trim();
-    const endereco = (args.endereco as string || "").trim();
-    const numero = (args.numero as string || "").trim();
-    const complemento = (args.complemento as string || "").trim();
-    const observacoes = (args.observacoes as string || "").trim();
-
     try {
-        const conversation = await prisma.conversation.findUnique({
-            where: { id: context.conversationId },
-            select: { customerPhone: true, customerName: true },
+        // Buscar pedidos pendentes para calcular total
+        const pendingOrders = await prisma.order.findMany({
+            where: {
+                conversationId: context.conversationId,
+                status: { in: ["AWAITING_PAYMENT", "PROOF_SENT"] },
+            },
         });
 
-        if (!conversation) {
+        let totalGeral = 0;
+        for (const order of pendingOrders) {
+            totalGeral += order.totalAmount;
+            await prisma.order.update({
+                where: { id: order.id },
+                data: {
+                    deliveryType: "PICKUP",
+                    deliveryFee: 0,
+                },
+            });
+        }
+
+        // Buscar dados do PIX
+        const company = await prisma.company.findUnique({
+            where: { id: context.companyId },
+            select: { pixKey: true, pixKeyType: true },
+        });
+
+        const totalFormatado = totalGeral.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+        // Se não tem PIX configurado
+        if (!company?.pixKey) {
             return {
-                success: false,
-                message: "Ops, tive um probleminha aqui. Pode tentar de novo?",
+                success: true,
+                message: `🏪 Trabalhamos apenas com *RETIRADA NA LOJA*!
+
+${totalGeral > 0 ? `💰 *Total do pedido:* ${totalFormatado}\n\n` : ""}Vou verificar como você pode pagar e já te aviso! 😊`,
+                data: {
+                    tipoEntrega: "PICKUP",
+                    noDelivery: true,
+                    totalAmount: totalGeral,
+                    needsPixSetup: true,
+                },
             };
         }
 
-        // Se é retirada, apenas registrar
-        if (tipoEntrega === "PICKUP") {
-            // Buscar pedidos pendentes para obter total
-            const pendingOrders = await prisma.order.findMany({
-                where: {
-                    conversationId: context.conversationId,
-                    status: { in: ["AWAITING_PAYMENT", "PROOF_SENT"] },
-                },
-            });
+        const tipoChave = company.pixKeyType || "Chave";
 
-            let totalGeral = 0;
-            for (const order of pendingOrders) {
-                totalGeral += order.totalAmount;
-                await prisma.order.update({
-                    where: { id: order.id },
-                    data: {
-                        deliveryType: "PICKUP",
-                        deliveryFee: 0,
-                        customerNotes: observacoes || null,
-                    },
-                });
-            }
-
-            // Buscar dados do PIX
-            const company = await prisma.company.findUnique({
-                where: { id: context.companyId },
-                select: { pixKey: true, pixKeyType: true },
-            });
-
-            if (!company?.pixKey) {
-                return {
-                    success: true,
-                    message: `Perfeito! 🏪 Seu pedido será para *retirada*!\n\nVou preparar aqui e te aviso quando estiver pronto. Beleza?`,
-                    data: { tipoEntrega: "PICKUP" },
-                };
-            }
-
-            const totalFormatado = totalGeral.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-            const tipoChave = company.pixKeyType || "Chave";
-
-            return {
-                success: true,
-                message: `Perfeito! 🏪 Seu pedido será para *retirada*!
-
+        return {
+            success: true,
+            message: `🏪 Trabalhamos apenas com *RETIRADA NA LOJA*!
+${totalGeral > 0 ? `
 💰 *Total:* ${totalFormatado}
 
 💳 *PIX (${tipoChave}):* ${company.pixKey}
 
-Quando pagar, manda o comprovante aqui! 📱
-Vou te avisar quando estiver pronto pra buscar.`,
-                data: {
-                    tipoEntrega: "PICKUP",
-                    totalAmount: totalGeral,
-                    pixKey: company.pixKey,
-                    awaitingProof: true,
-                },
-            };
-        }
-
-        // Se é entrega
-        if (tipoEntrega === "DELIVERY") {
-            // Se não tem bairro ainda, pedir
-            if (!bairro) {
-                return {
-                    success: true,
-                    message: `Beleza! 🛵 Seu pedido será *entrega*!\n\nPra calcular a taxa, me passa:\n• Seu *endereço* (rua e número)\n• Seu *bairro*`,
-                    data: { tipoEntrega: "DELIVERY", needsAddress: true },
-                };
-            }
-
-            // Se tem bairro mas não tem endereço/número, pedir apenas isso
-            if (!endereco || !numero) {
-                return {
-                    success: true,
-                    message: `Ótimo! Bairro *${bairro}*.\n\nAgora me passa:\n• O nome da *rua*\n• O *número* da casa/prédio${!complemento ? "\n• Complemento (apt, bloco, etc) se tiver" : ""}`,
-                    data: { tipoEntrega: "DELIVERY", bairro, needsStreetNumber: true },
-                };
-            }
-
-            // Buscar a zona de entrega pelo bairro
-            const deliveryZone = await prisma.deliveryZone.findFirst({
-                where: {
-                    companyId: context.companyId,
-                    isActive: true,
-                    name: {
-                        equals: bairro,
-                        mode: "insensitive",
-                    },
-                },
-            });
-
-            // Se não encontrou, tentar busca parcial
-            let zone = deliveryZone;
-            if (!zone) {
-                zone = await prisma.deliveryZone.findFirst({
-                    where: {
-                        companyId: context.companyId,
-                        isActive: true,
-                        name: {
-                            contains: bairro,
-                            mode: "insensitive",
-                        },
-                    },
-                });
-            }
-
-            // Se ainda não encontrou, verificar se há bairros cadastrados
-            if (!zone) {
-                const anyZones = await prisma.deliveryZone.findFirst({
-                    where: {
-                        companyId: context.companyId,
-                        isActive: true,
-                    },
-                });
-
-                if (anyZones) {
-                    // Lista os bairros disponíveis
-                    const availableZones = await prisma.deliveryZone.findMany({
-                        where: {
-                            companyId: context.companyId,
-                            isActive: true,
-                        },
-                        orderBy: { order: "asc" },
-                        take: 10,
-                    });
-
-                    const zonesList = availableZones.map(z => `• ${z.name}`).join("\n");
-
-                    return {
-                        success: false,
-                        message: `Hmm, não atendemos o bairro *${bairro}* no momento. 😔\n\nBairros que entregamos:\n${zonesList}\n\nSeu bairro está na lista?`,
-                        data: { bairroNotFound: true, availableZones: availableZones.map(z => z.name) },
-                    };
-                } else {
-                    // Sem bairros cadastrados, usar taxa padrão ou informar
-                    return {
-                        success: true,
-                        message: `Endereço anotado! 📍\n\n*${endereco}, ${numero}*${complemento ? ` - ${complemento}` : ""}\n*Bairro:* ${bairro}\n\n⚠️ A taxa de entrega será confirmada em breve.`,
-                        data: { tipoEntrega: "DELIVERY", bairro, endereco, numero, noZoneConfig: true },
-                    };
-                }
-            }
-
-            // Encontrou a zona - montar endereço completo
-            const enderecoCompleto = `${endereco}, ${numero}${complemento ? ` - ${complemento}` : ""}`;
-            const taxaFormatada = zone.fee.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-            // Buscar pedidos pendentes para adicionar taxa de entrega
-            // IMPORTANTE: Agora os pedidos podem ter múltiplos itens combinados
-            const pendingOrders = await prisma.order.findMany({
-                where: {
-                    conversationId: context.conversationId,
-                    status: { in: ["AWAITING_PAYMENT", "PROOF_SENT"] },
-                },
-            });
-
-            // Atualizar cada pedido com a taxa de entrega (UMA VEZ)
-            // O totalAmount já contém a soma de todos os itens
-            let totalGeral = 0;
-            for (const order of pendingOrders) {
-                // Se já tem taxa de entrega aplicada, não somar de novo
-                const currentDeliveryFee = order.deliveryFee || 0;
-                const taxaAAdicionar = currentDeliveryFee > 0 ? 0 : zone.fee;
-
-                // Usar o totalAmount existente (já tem soma dos itens) + taxa
-                const newTotal = order.totalAmount + taxaAAdicionar;
-                totalGeral += newTotal;
-
-                await prisma.order.update({
-                    where: { id: order.id },
-                    data: {
-                        deliveryType: "DELIVERY",
-                        deliveryAddress: enderecoCompleto,
-                        deliveryCity: bairro, // Usando campo city para bairro (negócio local)
-                        deliveryFee: zone.fee,
-                        totalAmount: newTotal, // ✅ Total = soma dos itens + taxa (uma vez)
-                        customerNotes: observacoes || null,
-                    },
-                });
-            }
-
-            // Formatar total para exibição
-            const totalFormatado = totalGeral.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-            // Buscar dados do PIX
-            const company = await prisma.company.findUnique({
-                where: { id: context.companyId },
-                select: { pixKey: true, pixKeyType: true },
-            });
-
-            // Dispatch webhook
-            dispatchWebhook(context.companyId, "MESSAGE_RECEIVED", {
-                type: "DELIVERY_ADDRESS_COLLECTED",
-                conversationId: context.conversationId,
-                address: enderecoCompleto,
-                bairro,
-                deliveryFee: zone.fee,
+Quando pagar, me manda o comprovante aqui! 📱
+Vou te avisar quando estiver pronto pra buscar.` : `
+Quando você fechar seu pedido, te passo os dados pra pagamento! 😊`}`,
+            data: {
+                tipoEntrega: "PICKUP",
+                noDelivery: true,
                 totalAmount: totalGeral,
-                estimatedTime: zone.estimatedTime,
-                timestamp: new Date().toISOString(),
-            }).catch((err) => console.error("[Webhook] Delivery address failed:", err));
-
-            // Calcular subtotal (antes da taxa)
-            const subtotalPedido = totalGeral - zone.fee;
-            const subtotalFormatado = subtotalPedido.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-            const tipoChave = company?.pixKeyType || "Chave";
-
-            // Mensagem com PIX e breakdown completo
-            let mensagem = `Endereço confirmado! 📍
-
-*${enderecoCompleto}*
-*Bairro:* ${bairro}
-
-📝 *Subtotal:* ${subtotalFormatado}
-🛵 *Taxa de entrega:* ${taxaFormatada}
-💰 *TOTAL A PAGAR:* ${totalFormatado}`;
-
-            if (zone.estimatedTime) {
-                mensagem += `\n⏱️ *Tempo estimado:* ${zone.estimatedTime}`;
-            }
-
-            if (company?.pixKey) {
-                mensagem += `\n\n💳 *PIX (${tipoChave}):* ${company.pixKey}\n\nQuando pagar, manda o comprovante aqui! 📱`;
-            } else {
-                mensagem += `\n\nQuando pagar, manda o comprovante aqui! 📱`;
-            }
-
-            return {
-                success: true,
-                message: mensagem,
-                data: {
-                    tipoEntrega: "DELIVERY",
-                    bairro,
-                    endereco: enderecoCompleto,
-                    deliveryFee: zone.fee,
-                    totalAmount: totalGeral,
-                    subtotal: subtotalPedido,
-                    pixKey: company?.pixKey,
-                    estimatedTime: zone.estimatedTime,
-                    awaitingProof: true,
-                },
-            };
-        }
-
-        return {
-            success: false,
-            message: "É para *entrega* ou *retirada*? 🛵🏪",
+                pixKey: company.pixKey,
+                awaitingProof: totalGeral > 0,
+            },
         };
     } catch (error) {
         console.error("[AI Functions] Error in coletarEnderecoEntrega:", error);
         return {
-            success: false,
-            message: "Tive um probleminha. Pode repetir se é entrega ou retirada?",
+            success: true,
+            message: `🏪 Trabalhamos apenas com *RETIRADA NA LOJA*! Não fazemos entrega no momento.`,
+            data: { tipoEntrega: "PICKUP", noDelivery: true },
         };
     }
 }
