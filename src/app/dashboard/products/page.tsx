@@ -82,6 +82,16 @@ interface ProductForm {
     material: string;
     sku: string;
     gender: string;
+    // Novos campos
+    images: string[];
+    tags: string[];
+    brand: string;
+    supplier: string;
+    productType: string;
+    occasion: string;
+    season: string;
+    variantsEnabled: boolean;
+    variants: { size: string; color: string; stock: number }[];
 }
 
 const initialForm: ProductForm = {
@@ -103,6 +113,16 @@ const initialForm: ProductForm = {
     material: "",
     sku: "",
     gender: "",
+    // Novos campos
+    images: [],
+    tags: [],
+    brand: "",
+    supplier: "",
+    productType: "",
+    occasion: "",
+    season: "",
+    variantsEnabled: false,
+    variants: [],
 };
 
 export default function ProductsPage() {
@@ -307,6 +327,16 @@ export default function ProductsPage() {
                 material: product.material || "",
                 sku: product.sku || "",
                 gender: product.gender || "",
+                // Novos campos
+                images: (product as unknown as { images?: string[] }).images || [],
+                tags: (product as unknown as { tags?: string[] }).tags || [],
+                brand: (product as unknown as { brand?: string }).brand || "",
+                supplier: (product as unknown as { supplier?: string }).supplier || "",
+                productType: (product as unknown as { productType?: string }).productType || "",
+                occasion: (product as unknown as { occasion?: string }).occasion || "",
+                season: (product as unknown as { season?: string }).season || "",
+                variantsEnabled: false,
+                variants: [],
             });
         } else {
             setEditingProduct(null);
@@ -361,6 +391,14 @@ export default function ProductsPage() {
                     material: form.material.trim() || null,
                     sku: form.sku.trim() || null,
                     gender: form.gender || null,
+                    // Novos campos
+                    images: form.images,
+                    tags: form.tags,
+                    brand: form.brand.trim() || null,
+                    supplier: form.supplier.trim() || null,
+                    productType: form.productType || null,
+                    occasion: form.occasion || null,
+                    season: form.season || null,
                 }),
             });
 

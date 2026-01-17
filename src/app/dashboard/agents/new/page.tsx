@@ -65,7 +65,7 @@ export default function NewAgentPage() {
         name: "",
         description: "",
         personality: "",
-        tone: "profissional",
+        tone: "casual",
         canSell: true, // Loja de roupas sempre pode vender
         canNegotiate: false,
         transferToHuman: true,
@@ -345,11 +345,10 @@ export default function NewAgentPage() {
                                 onChange={(e) => setFormData({ ...formData, tone: e.target.value })}
                                 className="dash-input dash-select"
                             >
-                                <option value="profissional">Profissional</option>
-                                <option value="amigavel">Amigável</option>
-                                <option value="formal">Formal</option>
-                                <option value="casual">Casual</option>
-                                <option value="tecnico">Técnico</option>
+                                <option value="casual">Casual (Oi! Beleza!)</option>
+                                <option value="street">Street (Fala mano! E aí!)</option>
+                                <option value="friendly">Amigável (Oii, querida!)</option>
+                                <option value="formal">Formal (Bom dia, como posso ajudar?)</option>
                             </select>
                         </div>
                     </div>

@@ -827,11 +827,14 @@ model Product {
   description   String?   @db.Text
   price         Float
   
-  // Imagem do produto (Cloudinary)
+  // Imagem principal do produto (Cloudinary)
   imageUrl      String?
   imagePublicId String?   // ID do Cloudinary para deletar depois
   
-  // Estoque
+  // Múltiplas imagens adicionais
+  images        String[]  @default([])  // URLs das imagens adicionais
+  
+  // Estoque (legacy - para produtos sem variantes)
   stockEnabled  Boolean   @default(false)
   stockQuantity Int       @default(0)
   
@@ -845,6 +848,22 @@ model Product {
   material      String?                 // "100% Algodão"
   sku           String?                 // Código do produto
   gender        String?                 // "Masculino", "Feminino", "Unissex"
+  
+  // Fornecedor e Marca
+  brand         String?                 // "Nike", "Adidas", "Marca Própria"
+  supplier      String?                 // Código ou nome do fornecedor
+  
+  // Tipo de Peça (mais específico que categoria)
+  productType   String?                 // "Camiseta", "Calça", "Vestido", etc.
+  
+  // Ocasião de Uso
+  occasion      String?                 // "Casual", "Trabalho", "Festa", "Esporte"
+  
+  // Estação/Coleção
+  season        String?                 // "Verão 2025", "Inverno 2024", "Permanente"
+  
+  // Tags para busca
+  tags          String[]  @default([])  // ["básico", "lançamento", "promoção"]
   
   isActive      Boolean   @default(true)
   
@@ -863,11 +882,33 @@ model Product {
   updatedAt     DateTime  @updatedAt
   
   orders        Order[]
+  variants      ProductVariant[]
   
   @@index([companyId])
   @@index([isActive])
   @@index([categoryId])
   @@index([needsReview])
+  @@index([productType])
+  @@index([brand])
+}
+
+// Variantes de Produto (Estoque por Tamanho/Cor)
+model ProductVariant {
+  id          String   @id @default(cuid())
+  
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  size        String   // "P", "M", "G", "GG"
+  color       String   // "Preto", "Branco", "Azul"
+  sku         String?  // SKU específico da variante
+  stock       Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([productId, size, color])
+  @@index([productId])
 }
 
 // ========================

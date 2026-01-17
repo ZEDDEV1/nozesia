@@ -32,6 +32,16 @@ interface ProductFormData {
     material: string;
     sku: string;
     gender: string;
+    // Novos campos para loja de roupas
+    images: string[];           // Múltiplas imagens
+    tags: string[];             // Tags para busca
+    brand: string;              // Marca
+    supplier: string;           // Fornecedor
+    productType: string;        // Tipo de peça
+    occasion: string;           // Ocasião de uso
+    season: string;             // Estação/Coleção
+    variantsEnabled: boolean;   // Habilitar variantes
+    variants: { size: string; color: string; stock: number }[];
 }
 
 interface ProductModalProps {
@@ -57,13 +67,31 @@ const DEFAULT_COLORS = [
     { name: "Rosa", hex: "#ec4899" },
     { name: "Cinza", hex: "#6b7280" },
     { name: "Bege", hex: "#d4b896" },
+    { name: "Marrom", hex: "#8B4513" },
+    { name: "Amarelo", hex: "#facc15" },
 ];
+
+const PRODUCT_TYPES = [
+    "Camiseta", "Blusa", "Camisa", "Regata", "Cropped",
+    "Calça", "Short", "Bermuda", "Saia", "Vestido",
+    "Jaqueta", "Casaco", "Moletom", "Cardigan",
+    "Macacão", "Conjunto", "Acessório", "Outro"
+];
+
+const OCCASIONS = ["Casual", "Trabalho", "Festa", "Esporte", "Praia", "Noite", "Dia a Dia"];
+
+const SEASONS = ["Verão 2025", "Inverno 2025", "Outono 2025", "Primavera 2025", "Permanente", "Lançamento"];
+
+const DEFAULT_TAGS = ["básico", "tendência", "lançamento", "promoção", "exclusivo", "plus size", "sustentável"];
 
 const initialForm: ProductFormData = {
     name: "", description: "", price: "", imageUrl: "", imagePublicId: "",
     categoryId: "", stockEnabled: false, stockQuantity: "0", isActive: true,
     isFeatured: false, isPromo: false, promoPrice: "",
     sizes: [], colors: [], material: "", sku: "", gender: "",
+    // Novos campos
+    images: [], tags: [], brand: "", supplier: "", productType: "",
+    occasion: "", season: "", variantsEnabled: false, variants: [],
 };
 
 // Reusable Toggle Component
@@ -245,14 +273,20 @@ export default function ProductModal({
                     <div style={{ flex: 1, overflow: "auto", padding: "1.25rem" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
 
-                            {/* IMAGE UPLOAD */}
+                            {/* IMAGE GALLERY */}
                             <div style={{ padding: "1rem", background: "rgba(255,255,255,0.02)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)" }}>
-                                <SectionHeader icon={Upload} title="Foto do Produto" />
+                                <SectionHeader icon={Upload} title="Fotos do Produto" badge={
+                                    <span style={{ marginLeft: "auto", padding: "0.2rem 0.5rem", borderRadius: 12, background: "rgba(236,72,153,0.15)", color: "#f472b6", fontSize: "0.75rem" }}>
+                                        {(form.imageUrl ? 1 : 0) + form.images.length}/5
+                                    </span>
+                                } />
                                 <input type="file" ref={fileInputRef} onChange={onImageUpload} accept="image/*" style={{ display: "none" }} />
+
+                                {/* Main Image */}
                                 <div
                                     onClick={() => !uploading && fileInputRef.current?.click()}
                                     style={{
-                                        height: 180, borderRadius: 14,
+                                        height: 160, borderRadius: 14,
                                         border: form.imageUrl ? "2px solid rgba(236,72,153,0.3)" : "2px dashed rgba(236,72,153,0.25)",
                                         background: form.imageUrl ? `url(${form.imageUrl}) center/cover` : "linear-gradient(135deg, rgba(236,72,153,0.03), rgba(168,85,247,0.02))",
                                         display: "flex", alignItems: "center", justifyContent: "center",
@@ -264,24 +298,99 @@ export default function ProductModal({
                                     ) : !form.imageUrl ? (
                                         <div style={{ textAlign: "center", color: "#64748b" }}>
                                             <Upload style={{ width: 32, height: 32, color: "#ec4899", marginBottom: "0.5rem" }} />
-                                            <p style={{ margin: 0, fontSize: "0.9rem", color: "#94a3b8" }}>Clique para enviar</p>
-                                            <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", opacity: 0.6 }}>PNG, JPG ou WebP até 5MB</p>
+                                            <p style={{ margin: 0, fontSize: "0.9rem", color: "#94a3b8" }}>Foto Principal</p>
+                                            <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", opacity: 0.6 }}>Clique para enviar</p>
                                         </div>
                                     ) : (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); clearImage(); }}
-                                            style={{
-                                                position: "absolute", top: 8, right: 8,
-                                                width: 32, height: 32, borderRadius: 8,
-                                                background: "rgba(239,68,68,0.9)", border: "none",
-                                                display: "flex", alignItems: "center", justifyContent: "center",
-                                                cursor: "pointer", color: "white",
-                                            }}
-                                        >
-                                            <Trash2 style={{ width: 16, height: 16 }} />
-                                        </button>
+                                        <>
+                                            <span style={{
+                                                position: "absolute", bottom: 8, left: 8,
+                                                padding: "0.25rem 0.5rem", borderRadius: 6,
+                                                background: "rgba(236,72,153,0.9)", color: "white",
+                                                fontSize: "0.7rem", fontWeight: 600,
+                                            }}>Principal</span>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); clearImage(); }}
+                                                style={{
+                                                    position: "absolute", top: 8, right: 8,
+                                                    width: 28, height: 28, borderRadius: 6,
+                                                    background: "rgba(239,68,68,0.9)", border: "none",
+                                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                                    cursor: "pointer", color: "white",
+                                                }}
+                                            >
+                                                <Trash2 style={{ width: 14, height: 14 }} />
+                                            </button>
+                                        </>
                                     )}
                                 </div>
+
+                                {/* Additional Images Gallery */}
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem", marginTop: "0.75rem" }}>
+                                    {form.images.map((img, idx) => (
+                                        <div key={idx} style={{
+                                            aspectRatio: "1", borderRadius: 10,
+                                            background: `url(${img}) center/cover`,
+                                            border: "1px solid rgba(255,255,255,0.1)",
+                                            position: "relative",
+                                        }}>
+                                            <button
+                                                onClick={() => setForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }))}
+                                                style={{
+                                                    position: "absolute", top: 4, right: 4,
+                                                    width: 22, height: 22, borderRadius: 4,
+                                                    background: "rgba(239,68,68,0.9)", border: "none",
+                                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                                    cursor: "pointer", color: "white",
+                                                }}
+                                            >
+                                                <X style={{ width: 12, height: 12 }} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {/* Add more button */}
+                                    {form.images.length < 4 && form.imageUrl && (
+                                        <div
+                                            onClick={() => {
+                                                const input = document.createElement("input");
+                                                input.type = "file";
+                                                input.accept = "image/*";
+                                                input.onchange = async (e) => {
+                                                    const file = (e.target as HTMLInputElement).files?.[0];
+                                                    if (!file) return;
+                                                    const reader = new FileReader();
+                                                    reader.onloadend = async () => {
+                                                        const base64 = reader.result as string;
+                                                        try {
+                                                            const res = await fetch("/api/upload", {
+                                                                method: "POST",
+                                                                headers: { "Content-Type": "application/json" },
+                                                                body: JSON.stringify({ file: base64, type: "base64", folder: "products" }),
+                                                            });
+                                                            const data = await res.json();
+                                                            if (data.success) {
+                                                                setForm(f => ({ ...f, images: [...f.images, data.data.url] }));
+                                                            }
+                                                        } catch { /* ignore */ }
+                                                    };
+                                                    reader.readAsDataURL(file);
+                                                };
+                                                input.click();
+                                            }}
+                                            style={{
+                                                aspectRatio: "1", borderRadius: 10,
+                                                border: "2px dashed rgba(236,72,153,0.3)",
+                                                display: "flex", alignItems: "center", justifyContent: "center",
+                                                cursor: "pointer", background: "rgba(236,72,153,0.03)",
+                                            }}
+                                        >
+                                            <Plus style={{ width: 20, height: 20, color: "#ec4899" }} />
+                                        </div>
+                                    )}
+                                </div>
+                                <p style={{ margin: "0.5rem 0 0", fontSize: "0.7rem", color: "#64748b", textAlign: "center" }}>
+                                    Adicione até 5 fotos (1 principal + 4 adicionais)
+                                </p>
                             </div>
 
                             {/* IDENTIFICATION */}
@@ -327,6 +436,218 @@ export default function ProductModal({
                                         <textarea className="dash-input" rows={2} placeholder="Tecido, caimento, estilo..." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} style={{ resize: "none", minHeight: 70 }} />
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* TIPO DE PEÇA, OCASIÃO E ESTAÇÃO */}
+                            <div style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(251,191,36,0.04), rgba(245,158,11,0.02))", borderRadius: 16, border: "1px solid rgba(251,191,36,0.12)" }}>
+                                <SectionHeader icon={Tag} title="Classificação" color="#f59e0b" />
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.875rem" }}>
+                                    <div>
+                                        <label className="dash-label">Tipo de Peça</label>
+                                        <select className="dash-select" value={form.productType} onChange={(e) => setForm({ ...form, productType: e.target.value })}>
+                                            <option value="">Selecione...</option>
+                                            {PRODUCT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="dash-label">Ocasião</label>
+                                        <select className="dash-select" value={form.occasion} onChange={(e) => setForm({ ...form, occasion: e.target.value })}>
+                                            <option value="">Selecione...</option>
+                                            {OCCASIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="dash-label">Estação/Coleção</label>
+                                        <select className="dash-select" value={form.season} onChange={(e) => setForm({ ...form, season: e.target.value })}>
+                                            <option value="">Selecione...</option>
+                                            {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* MARCA E FORNECEDOR */}
+                            <div style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(59,130,246,0.04), rgba(96,165,250,0.02))", borderRadius: 16, border: "1px solid rgba(59,130,246,0.12)" }}>
+                                <SectionHeader icon={Tag} title="Marca e Fornecedor" color="#3b82f6" />
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.875rem" }}>
+                                    <div>
+                                        <label className="dash-label">Marca</label>
+                                        <input className="dash-input" placeholder="Ex: Nike, Zara, Marca Própria" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
+                                    </div>
+                                    <div>
+                                        <label className="dash-label">Fornecedor</label>
+                                        <input className="dash-input" placeholder="Código ou nome do fornecedor" value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* TAGS */}
+                            <div style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(34,211,153,0.04), rgba(16,185,129,0.02))", borderRadius: 16, border: "1px solid rgba(34,211,153,0.12)" }}>
+                                <SectionHeader icon={Tag} title="Tags / Palavras-chave" color="#10b981" badge={
+                                    form.tags.length > 0 && <span style={{ marginLeft: "auto", padding: "0.2rem 0.5rem", borderRadius: 12, background: "rgba(16,185,129,0.15)", color: "#34d399", fontSize: "0.75rem" }}>{form.tags.length} tags</span>
+                                } />
+                                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+                                    {DEFAULT_TAGS.map(tag => (
+                                        <button key={tag} type="button" onClick={() => setForm(f => ({ ...f, tags: f.tags.includes(tag) ? f.tags.filter(t => t !== tag) : [...f.tags, tag] }))} style={{
+                                            padding: "0.4rem 0.75rem", borderRadius: 8, cursor: "pointer", fontWeight: 500, fontSize: "0.8rem",
+                                            background: form.tags.includes(tag) ? "linear-gradient(135deg, #10b981, #059669)" : "rgba(255,255,255,0.03)",
+                                            border: form.tags.includes(tag) ? "none" : "1px solid rgba(255,255,255,0.1)",
+                                            color: form.tags.includes(tag) ? "white" : "#94a3b8", transition: "all 0.2s",
+                                        }}>{tag}</button>
+                                    ))}
+                                </div>
+                                {form.tags.filter(t => !DEFAULT_TAGS.includes(t)).length > 0 && (
+                                    <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+                                        {form.tags.filter(t => !DEFAULT_TAGS.includes(t)).map(tag => (
+                                            <span key={tag} onClick={() => setForm(f => ({ ...f, tags: f.tags.filter(t => t !== tag) }))} style={{
+                                                padding: "0.35rem 0.6rem", borderRadius: 6, background: "rgba(16,185,129,0.2)", border: "1px solid rgba(16,185,129,0.4)", color: "#34d399", fontSize: "0.75rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem",
+                                            }}>{tag} <X style={{ width: 10, height: 10 }} /></span>
+                                        ))}
+                                    </div>
+                                )}
+                                <input className="dash-input" placeholder="Digite e pressione Enter para adicionar tag personalizada..." onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        const value = (e.target as HTMLInputElement).value.trim().toLowerCase();
+                                        if (value && !form.tags.includes(value)) {
+                                            setForm(f => ({ ...f, tags: [...f.tags, value] }));
+                                            (e.target as HTMLInputElement).value = "";
+                                        }
+                                    }
+                                }} style={{ marginTop: "0.5rem" }} />
+                            </div>
+
+                            {/* VARIANTS STOCK */}
+                            <div style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(251,146,60,0.04), rgba(249,115,22,0.02))", borderRadius: 16, border: "1px solid rgba(251,146,60,0.12)" }}>
+                                <SectionHeader icon={Box} title="Estoque por Variante" color="#f97316" badge={
+                                    <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                        <span style={{ padding: "0.2rem 0.5rem", borderRadius: 12, background: "rgba(249,115,22,0.15)", color: "#fb923c", fontSize: "0.75rem" }}>
+                                            {form.variants.length} variantes
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setForm(f => ({ ...f, variantsEnabled: !f.variantsEnabled }))}
+                                            style={{
+                                                padding: "0.25rem 0.5rem", borderRadius: 8, cursor: "pointer",
+                                                background: form.variantsEnabled ? "rgba(249,115,22,0.3)" : "rgba(255,255,255,0.05)",
+                                                border: form.variantsEnabled ? "1px solid rgba(249,115,22,0.5)" : "1px solid rgba(255,255,255,0.1)",
+                                                color: form.variantsEnabled ? "#fb923c" : "#64748b", fontSize: "0.7rem",
+                                            }}
+                                        >
+                                            {form.variantsEnabled ? "Ativo" : "Inativo"}
+                                        </button>
+                                    </div>
+                                } />
+
+                                {form.variantsEnabled && (
+                                    <>
+                                        <p style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", color: "#64748b" }}>
+                                            Defina o estoque para cada combinação de tamanho e cor selecionados acima.
+                                        </p>
+
+                                        {/* Variants Grid */}
+                                        {form.sizes.length > 0 && form.colors.length > 0 ? (
+                                            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxHeight: 200, overflowY: "auto" }}>
+                                                {form.sizes.map(size => (
+                                                    form.colors.map(color => {
+                                                        const variantKey = `${size}-${color}`;
+                                                        const existingVariant = form.variants.find(v => v.size === size && v.color === color);
+                                                        const stock = existingVariant?.stock ?? 0;
+                                                        return (
+                                                            <div key={variantKey} style={{
+                                                                display: "flex", alignItems: "center", gap: "0.75rem",
+                                                                padding: "0.5rem 0.75rem", borderRadius: 10,
+                                                                background: stock > 0 ? "rgba(249,115,22,0.08)" : "rgba(255,255,255,0.02)",
+                                                                border: stock > 0 ? "1px solid rgba(249,115,22,0.2)" : "1px solid rgba(255,255,255,0.06)",
+                                                            }}>
+                                                                <div style={{
+                                                                    width: 12, height: 12, borderRadius: "50%",
+                                                                    background: DEFAULT_COLORS.find(c => c.name === color)?.hex || "#888",
+                                                                    border: "1px solid rgba(255,255,255,0.2)",
+                                                                }} />
+                                                                <span style={{ flex: 1, color: "#e2e8f0", fontSize: "0.85rem" }}>
+                                                                    <strong>{size}</strong> • {color}
+                                                                </span>
+                                                                <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setForm(f => {
+                                                                                const existing = f.variants.find(v => v.size === size && v.color === color);
+                                                                                if (existing) {
+                                                                                    return { ...f, variants: f.variants.map(v => v.size === size && v.color === color ? { ...v, stock: Math.max(0, v.stock - 1) } : v) };
+                                                                                }
+                                                                                return f;
+                                                                            });
+                                                                        }}
+                                                                        style={{
+                                                                            width: 24, height: 24, borderRadius: 6,
+                                                                            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+                                                                            color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                                                                        }}
+                                                                    >−</button>
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        value={stock}
+                                                                        onChange={(e) => {
+                                                                            const newStock = parseInt(e.target.value) || 0;
+                                                                            setForm(f => {
+                                                                                const existing = f.variants.find(v => v.size === size && v.color === color);
+                                                                                if (existing) {
+                                                                                    return { ...f, variants: f.variants.map(v => v.size === size && v.color === color ? { ...v, stock: newStock } : v) };
+                                                                                } else {
+                                                                                    return { ...f, variants: [...f.variants, { size, color, stock: newStock }] };
+                                                                                }
+                                                                            });
+                                                                        }}
+                                                                        style={{
+                                                                            width: 50, padding: "0.25rem", borderRadius: 6, textAlign: "center",
+                                                                            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(249,115,22,0.3)",
+                                                                            color: "white", fontSize: "0.85rem",
+                                                                        }}
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setForm(f => {
+                                                                                const existing = f.variants.find(v => v.size === size && v.color === color);
+                                                                                if (existing) {
+                                                                                    return { ...f, variants: f.variants.map(v => v.size === size && v.color === color ? { ...v, stock: v.stock + 1 } : v) };
+                                                                                } else {
+                                                                                    return { ...f, variants: [...f.variants, { size, color, stock: 1 }] };
+                                                                                }
+                                                                            });
+                                                                        }}
+                                                                        style={{
+                                                                            width: 24, height: 24, borderRadius: 6,
+                                                                            background: "rgba(249,115,22,0.2)", border: "1px solid rgba(249,115,22,0.3)",
+                                                                            color: "#fb923c", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                                                                        }}
+                                                                    >+</button>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div style={{ padding: "1rem", textAlign: "center", color: "#64748b", fontSize: "0.85rem", background: "rgba(255,255,255,0.02)", borderRadius: 10, border: "1px dashed rgba(255,255,255,0.1)" }}>
+                                                Selecione tamanhos e cores acima para gerenciar o estoque por variante
+                                            </div>
+                                        )}
+
+                                        {/* Total Stock Summary */}
+                                        {form.variants.length > 0 && (
+                                            <div style={{ marginTop: "0.75rem", padding: "0.5rem 0.75rem", borderRadius: 8, background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                <span style={{ color: "#fb923c", fontSize: "0.8rem", fontWeight: 500 }}>Estoque Total</span>
+                                                <span style={{ color: "#ffffff", fontSize: "0.9rem", fontWeight: 700 }}>
+                                                    {form.variants.reduce((sum, v) => sum + v.stock, 0)} unidades
+                                                </span>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
                             </div>
 
                             {/* PRODUCT SETTINGS */}
