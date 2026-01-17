@@ -151,7 +151,7 @@ NÃO apenas fale sobre registrar - EXECUTE a função!`,
 - "Sim" (confirmando compra) → CHAMAR processarVenda()
 
 ⚠️ IMPORTANTE:
-- NÃO oferecemos entrega, apenas RETIRADA NA LOJA!
+- Pergunte se é entrega ou retirada na loja
 - Se não souber o preço, use buscarProduto() primeiro
 - NÃO apenas fale sobre registrar pedido - EXECUTE a função!`,
             parameters: {
@@ -270,10 +270,13 @@ Use quando cliente pedir:
         type: "function" as const,
         function: {
             name: "coletarEnderecoEntrega",
-            description: `Informa sobre retirada na loja.
+            description: `Coleta informações sobre entrega ou retirada.
 
-⚠️ IMPORTANTE: Trabalhamos APENAS com RETIRADA NA LOJA!
-NÃO fazemos entrega!
+✅ Fazemos ENTREGA para todo o Brasil!
+- Transportadora para todo Brasil
+- Frete grátis acima de R$ 299
+- Van para algumas regiões
+- Motoboy para Castanhal
 
 Use quando cliente perguntar sobre:
 - "Vocês entregam?"
@@ -281,14 +284,14 @@ Use quando cliente perguntar sobre:
 - "Qual o frete?"
 - "Como recebo o produto?"
 
-Resposta padrão: "Trabalhamos apenas com retirada na loja!"`,
+📝 Consulte o FAQ/Treinamento para detalhes específicos de frete e regiões.`,
             parameters: {
                 type: "object",
                 properties: {
                     tipoEntrega: {
                         type: "string",
-                        enum: ["PICKUP"],
-                        description: "Sempre PICKUP - trabalhamos só com retirada"
+                        enum: ["DELIVERY", "PICKUP"],
+                        description: "DELIVERY para entrega, PICKUP para retirada na loja"
                     }
                 },
                 required: ["tipoEntrega"]
@@ -1307,12 +1310,18 @@ async function coletarEnderecoEntrega(
         if (!company?.pixKey) {
             return {
                 success: true,
-                message: `🏪 Trabalhamos apenas com *RETIRADA NA LOJA*!
+                message: `🚚 *Opções de entrega:*
 
-${totalGeral > 0 ? `💰 *Total do pedido:* ${totalFormatado}\n\n` : ""}Vou verificar como você pode pagar e já te aviso! 😊`,
+• *Transportadora* - Enviamos para todo Brasil
+• *Frete grátis* acima de R$ 299,00
+• *Van* - Para algumas regiões
+• *Motoboy* - Entregas em Castanhal
+• *Retirada* - Sem custo na loja
+
+${totalGeral > 0 ? `💰 *Subtotal:* ${totalFormatado}\n\n` : ""}Como você prefere receber? 😊`,
                 data: {
-                    tipoEntrega: "PICKUP",
-                    noDelivery: true,
+                    tipoEntrega: null,
+                    deliveryOptions: ["TRANSPORTADORA", "VAN", "MOTOBOY", "PICKUP"],
                     totalAmount: totalGeral,
                     needsPixSetup: true,
                 },
@@ -1323,29 +1332,30 @@ ${totalGeral > 0 ? `💰 *Total do pedido:* ${totalFormatado}\n\n` : ""}Vou veri
 
         return {
             success: true,
-            message: `🏪 Trabalhamos apenas com *RETIRADA NA LOJA*!
+            message: `🚚 *Opções de entrega:*
+
+• *Transportadora* - Enviamos para todo Brasil
+• *Frete grátis* acima de R$ 299,00
+• *Van* - Para algumas regiões
+• *Motoboy* - Entregas em Castanhal
+• *Retirada* - Sem custo na loja
 ${totalGeral > 0 ? `
-💰 *Total:* ${totalFormatado}
+💰 *Subtotal:* ${totalFormatado}` : ""}
 
-💳 *PIX (${tipoChave}):* ${company.pixKey}
-
-Quando pagar, me manda o comprovante aqui! 📱
-Vou te avisar quando estiver pronto pra buscar.` : `
-Quando você fechar seu pedido, te passo os dados pra pagamento! 😊`}`,
+Como você prefere receber? 🛵🏪`,
             data: {
-                tipoEntrega: "PICKUP",
-                noDelivery: true,
+                tipoEntrega: null,
+                deliveryOptions: ["TRANSPORTADORA", "VAN", "MOTOBOY", "PICKUP"],
                 totalAmount: totalGeral,
                 pixKey: company.pixKey,
-                awaitingProof: totalGeral > 0,
             },
         };
     } catch (error) {
         console.error("[AI Functions] Error in coletarEnderecoEntrega:", error);
         return {
             success: true,
-            message: `🏪 Trabalhamos apenas com *RETIRADA NA LOJA*! Não fazemos entrega no momento.`,
-            data: { tipoEntrega: "PICKUP", noDelivery: true },
+            message: `🚚 Fazemos entrega sim! Temos transportadora, van e motoboy. Também temos retirada na loja. Como você prefere?`,
+            data: { deliveryOptions: ["TRANSPORTADORA", "VAN", "MOTOBOY", "PICKUP"] },
         };
     }
 }
