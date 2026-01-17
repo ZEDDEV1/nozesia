@@ -486,9 +486,34 @@ async function buscarProduto(
                 }
             }
 
+            // 📐 Buscar tamanhos disponíveis
+            let sizesInfo = "";
+            let availableSizes: string[] = [];
+
+            // 1. Primeiro, verificar se tem variantes com estoque (mais preciso)
+            const variants = await prisma.productVariant.findMany({
+                where: {
+                    productId: bestMatch.id,
+                    stock: { gt: 0 }
+                },
+                select: { size: true, stock: true }
+            });
+
+            if (variants.length > 0) {
+                // Usar tamanhos das variantes com estoque
+                availableSizes = [...new Set(variants.map(v => v.size))];
+                sizesInfo = `\n📐 *Tamanhos disponíveis:* ${availableSizes.join(", ")}`;
+                console.log(`[AI Functions] Tamanhos com estoque (variantes): ${availableSizes.join(", ")}`);
+            } else if (bestMatch.sizes && bestMatch.sizes.length > 0) {
+                // 2. Fallback: usar campo sizes do produto
+                availableSizes = bestMatch.sizes;
+                sizesInfo = `\n📐 *Tamanhos:* ${availableSizes.join(", ")}`;
+                console.log(`[AI Functions] Tamanhos cadastrados (produto): ${availableSizes.join(", ")}`);
+            }
+
             return {
                 success: true,
-                message: `Achei! 🎉\n\n📦 *${bestMatch.name}*\n💰 *Preço:* ${priceFormatted}${bestMatch.category ? `\n🏷️ Categoria: ${bestMatch.category.name}` : ""}${bestMatch.description ? `\n📝 ${bestMatch.description.substring(0, 150)}${bestMatch.description.length > 150 ? "..." : ""}` : ""}${stockInfo}${productList}\n\n*Deseja comprar?* Posso gerar o pedido pra você! 🛒`,
+                message: `Achei! 🎉\n\n📦 *${bestMatch.name}*\n💰 *Preço:* ${priceFormatted}${bestMatch.category ? `\n🏷️ Categoria: ${bestMatch.category.name}` : ""}${sizesInfo}${bestMatch.description ? `\n📝 ${bestMatch.description.substring(0, 150)}${bestMatch.description.length > 150 ? "..." : ""}` : ""}${stockInfo}${productList}\n\n*Deseja comprar?* Posso gerar o pedido pra você! 🛒`,
                 data: {
                     found: true,
                     productId: bestMatch.id,
@@ -500,6 +525,7 @@ async function buscarProduto(
                     sendProductImage: hasImage, // Flag para o worker enviar a imagem
                     stockAvailable: !bestMatch.stockEnabled || bestMatch.stockQuantity > 0,
                     stockQuantity: bestMatch.stockQuantity,
+                    availableSizes, // Tamanhos disponíveis para a IA saber
                     needsStockVerification, // Nova flag para IA chamar solicitarVerificacao
                 }
             };
