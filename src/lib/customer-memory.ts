@@ -196,18 +196,23 @@ export function formatMemoryForPrompt(memory: CustomerMemoryData | null): string
 
     const parts: string[] = [];
 
-    parts.push(`=== HISTÓRICO COM ESTE CLIENTE ===`);
+    parts.push(`=== HISTÓRICO COM ESTE CLIENTE (APENAS REFERÊNCIA) ===`);
+    parts.push(`⚠️ IMPORTANTE: Foque na CONVERSA ATUAL. Use este histórico apenas se o cliente mencionar algo do passado.`);
     parts.push(`Conversas anteriores: ${memory.totalConversations}`);
     parts.push(`Último contato: ${formatDate(memory.lastContactAt)}`);
-    parts.push(`\nResumo do histórico:\n${memory.summary}`);
 
-    if (memory.lastProducts && memory.lastProducts.length > 0) {
-        parts.push(`\nProdutos/serviços de interesse anterior: ${memory.lastProducts.join(", ")}`);
+    // Resumo mais curto para não poluir o contexto
+    if (memory.summary && memory.summary.length > 0) {
+        const shortSummary = memory.summary.substring(0, 200) + (memory.summary.length > 200 ? "..." : "");
+        parts.push(`\nResumo geral (não mencione a menos que relevante): ${shortSummary}`);
     }
 
-    if (memory.tags.length > 0) {
-        parts.push(`\nTags do cliente: ${memory.tags.join(", ")}`);
+    // Só incluir produtos se forem poucos e relevantes
+    if (memory.lastProducts && memory.lastProducts.length > 0 && memory.lastProducts.length <= 3) {
+        parts.push(`\nProdutos anteriores (apenas referência): ${memory.lastProducts.join(", ")}`);
     }
+
+    parts.push(`\n⚠️ REGRA: Responda APENAS sobre o que o cliente está perguntando AGORA. NÃO mencione produtos ou assuntos de conversas passadas a menos que o cliente pergunte especificamente.`);
 
     return parts.join("\n");
 }

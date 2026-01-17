@@ -230,6 +230,42 @@ export async function generateAIResponseWithFunctions(
             };
         }
 
+        // 🔴 IMPORTANTE: Se buscarProduto retornar needsVerification ou needsStockVerification,
+        // automaticamente chamar solicitarVerificacao para mover para WAITING_RESPONSE
+        if (functionName === "buscarProduto" && result.success) {
+            const needsVerif = result.data?.needsVerification === true;
+            const needsStock = result.data?.needsStockVerification === true;
+
+            if (needsVerif || needsStock) {
+                console.log("[OpenAI] buscarProduto needs verification, auto-calling solicitarVerificacao");
+
+                const verificacaoArgs = {
+                    assunto: needsStock
+                        ? `Verificar disponibilidade/estoque: ${result.data?.searchTerm || result.data?.productName || "produto"}`
+                        : `Verificar se temos: ${result.data?.searchTerm || "produto mencionado pelo cliente"}`,
+                    produtoMencionado: result.data?.searchTerm || result.data?.productName || undefined,
+                    urgencia: "media"
+                };
+
+                // Executar solicitarVerificacao
+                const verifResult = await executeFunction("solicitarVerificacao", verificacaoArgs, functionContext);
+                console.log("[OpenAI] solicitarVerificacao result:", verifResult);
+
+                // Atualizar mensagem para incluir que a verificação foi solicitada
+                resultForAI = {
+                    ...result,
+                    message: verifResult.message || result.message,
+                    data: {
+                        ...result.data,
+                        verificationRequested: true,
+                    },
+                };
+
+                // Adicionar à lista de funções chamadas
+                functionsCalled.push("solicitarVerificacao");
+            }
+        }
+
         toolResults.push({
             role: "tool",
             tool_call_id: toolCall.id,
