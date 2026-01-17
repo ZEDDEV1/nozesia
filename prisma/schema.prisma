@@ -481,6 +481,7 @@ enum ConversationStatus {
   OPEN
   AI_HANDLING
   HUMAN_HANDLING
+  WAITING_RESPONSE
   CLOSED
 }
 

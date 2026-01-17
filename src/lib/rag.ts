@@ -276,13 +276,16 @@ export function buildContextFromChunks(chunks: RetrievedChunk[]): string {
     });
 
     return `
-## Informações Relevantes (Base de Conhecimento)
+## 📚 BASE DE CONHECIMENTO (USE APENAS ISTO!)
 
 ${contextParts.join("\n\n---\n\n")}
 
 ---
-Use as informações acima para responder à pergunta do cliente de forma precisa.
-Se a informação não estiver na base de conhecimento, responda com base no seu conhecimento geral, mas deixe claro se não tiver certeza.
+⚠️ REGRA ABSOLUTA: RESPONDA **APENAS** com as informações acima!
+- NÃO invente preços, tamanhos, cores ou estoque
+- NÃO use conhecimento geral sobre produtos
+- Se a informação NÃO estiver aqui → diga: "Deixa eu verificar aqui!"
+- Use buscarProduto() para buscar mais detalhes
 `;
 }
 

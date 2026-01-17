@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { LucideIcon, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { useCountUp, useCountUpFraction } from "@/hooks/useCountUp";
+import Link from "next/link";
 
 interface StatCardProps {
     title: string;
@@ -14,9 +15,10 @@ interface StatCardProps {
         label?: string; // Texto opcional (ex: "vs mês anterior")
     };
     index?: number; // Para stagger animation
+    href?: string; // Link opcional para tornar o card clicável
 }
 
-export function StatCard({ title, value, icon: Icon, color, trend, index = 0 }: StatCardProps) {
+export function StatCard({ title, value, icon: Icon, color, trend, index = 0, href }: StatCardProps) {
     // Determina se o valor é um número ou string com fração
     const isNumber = typeof value === "number";
     const isFraction = typeof value === "string" && value.includes("/");
@@ -54,7 +56,7 @@ export function StatCard({ title, value, icon: Icon, color, trend, index = 0 }: 
             ? TrendingDown
             : Minus;
 
-    return (
+    const cardContent = (
         <motion.div
             className="dash-stat-card"
             data-color={color}
@@ -69,6 +71,7 @@ export function StatCard({ title, value, icon: Icon, color, trend, index = 0 }: 
                 scale: 1.02,
                 transition: { duration: 0.2 }
             }}
+            style={href ? { cursor: "pointer" } : undefined}
         >
             <div className="dash-stat-header">
                 <div>
@@ -112,4 +115,12 @@ export function StatCard({ title, value, icon: Icon, color, trend, index = 0 }: 
             </div>
         </motion.div>
     );
+
+    // Se tem href, envolve com Link
+    if (href) {
+        return <Link href={href} style={{ textDecoration: "none" }}>{cardContent}</Link>;
+    }
+
+    return cardContent;
 }
+

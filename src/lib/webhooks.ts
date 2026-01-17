@@ -23,6 +23,7 @@ export type WebhookEventType =
     | "APPOINTMENT_REMINDER"
     | "PAYMENT_RECEIVED"
     | "LEAD_CAPTURED"
+    | "VERIFICATION_REQUESTED"
     | "TEST"; // Special test event
 
 // Payload interfaces

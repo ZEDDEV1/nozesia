@@ -26,7 +26,7 @@ export interface Conversation {
     id: string;
     customerName: string | null;
     customerPhone: string;
-    status: "OPEN" | "AI_HANDLING" | "HUMAN_HANDLING" | "CLOSED";
+    status: "OPEN" | "AI_HANDLING" | "HUMAN_HANDLING" | "WAITING_RESPONSE" | "CLOSED";
     unreadCount: number;
     lastMessageAt: string;
     agent: { id: string; name: string } | null;
@@ -41,7 +41,7 @@ export interface Conversation {
 // TIPOS
 // ============================================
 
-export type FilterType = "all" | "AI_HANDLING" | "HUMAN_HANDLING" | "CLOSED";
+export type FilterType = "all" | "AI_HANDLING" | "HUMAN_HANDLING" | "WAITING_RESPONSE" | "CLOSED";
 export type ConversationAction = "takeOver" | "returnAI" | "close" | "reopen";
 export type ConversationStatus = Conversation["status"];
 
@@ -53,6 +53,7 @@ export const FILTER_OPTIONS: { value: FilterType; label: string; icon: string }[
     { value: "all", label: "Todos", icon: "📋" },
     { value: "AI_HANDLING", label: "IA", icon: "🤖" },
     { value: "HUMAN_HANDLING", label: "Humano", icon: "👤" },
+    { value: "WAITING_RESPONSE", label: "Aguardando", icon: "⏳" },
     { value: "CLOSED", label: "Fechadas", icon: "✓" },
 ];
 
@@ -66,6 +67,7 @@ export const ACTION_STATUS_MAP: Record<ConversationAction, ConversationStatus> =
 export const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
     AI_HANDLING: { label: "IA", color: "#10b981" },
     HUMAN_HANDLING: { label: "Humano", color: "#3b82f6" },
+    WAITING_RESPONSE: { label: "Aguardando", color: "#f97316" },
     CLOSED: { label: "Fechada", color: "#64748b" },
     OPEN: { label: "Aberta", color: "#f59e0b" },
 };

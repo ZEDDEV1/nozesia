@@ -4,7 +4,7 @@
  * Re-usable types for conversations and messages across the application.
  */
 
-export type ConversationStatus = "OPEN" | "AI_HANDLING" | "HUMAN_HANDLING" | "CLOSED";
+export type ConversationStatus = "OPEN" | "AI_HANDLING" | "HUMAN_HANDLING" | "WAITING_RESPONSE" | "CLOSED";
 
 export type MessageType = "TEXT" | "IMAGE" | "AUDIO" | "VIDEO" | "DOCUMENT" | "STICKER";
 

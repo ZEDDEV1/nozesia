@@ -6,7 +6,8 @@ import {
     MessageCircle,
     Bot,
     Smartphone,
-    BookOpen
+    BookOpen,
+    Clock
 } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 import { useConversationsListSocket } from "@/lib/socket-client";
@@ -31,6 +32,7 @@ interface DashboardData {
         sessions: number;
         connectedSessions: number;
         conversations: number;
+        waitingResponse: number;
         messages: number;
         trainingData: number;
     };
@@ -168,6 +170,7 @@ export default function DashboardPage() {
         sessions: 0,
         connectedSessions: 0,
         conversations: 0,
+        waitingResponse: 0,
         messages: 0,
         trainingData: 0,
     };
@@ -186,6 +189,14 @@ export default function DashboardPage() {
                 : undefined
         },
         {
+            title: "Aguardando",
+            value: stats.waitingResponse,
+            icon: Clock,
+            color: "amber" as const,
+            href: "/dashboard/awaiting-response",
+            trend: stats.waitingResponse > 0 ? { value: stats.waitingResponse, label: "precisam atenção" } : undefined
+        },
+        {
             title: "Agentes de IA",
             value: `${stats.activeAgents}/${stats.agents}`,
             icon: Bot,
@@ -200,13 +211,6 @@ export default function DashboardPage() {
             trend: stats.sessions > 0
                 ? { value: stats.connectedSessions === stats.sessions ? 0 : Math.round((stats.connectedSessions / stats.sessions) * 100 - 100), label: "conectados" }
                 : undefined
-        },
-        {
-            title: "Treinamentos",
-            value: stats.trainingData,
-            icon: BookOpen,
-            color: "amber" as const,
-            trend: stats.trainingData > 0 ? { value: 0, label: "documentos" } : undefined
         },
     ];
 
@@ -236,6 +240,7 @@ export default function DashboardPage() {
                         color={stat.color}
                         trend={stat.trend}
                         index={index}
+                        href={stat.href}
                     />
                 ))}
             </div>

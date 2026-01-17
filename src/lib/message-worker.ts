@@ -293,6 +293,14 @@ async function generateAndSendAIResponse(params: {
         });
     }
 
+    // DEBUG: Log do contexto de treinamento sendo usado
+    logger.info("[TRAINING] Context being sent to AI", {
+        agentId: agent.id,
+        hasTrainingData,
+        contextLength: trainingContext.length,
+        contextPreview: trainingContext.substring(0, 300) + (trainingContext.length > 300 ? "..." : "")
+    });
+
     // Buscar memória de longo prazo do cliente
     const customerMemory = await getCustomerMemory(company.id, customerPhone);
     const memoryContext = formatMemoryForPrompt(customerMemory);
@@ -577,13 +585,26 @@ Exemplos de despedida: ${goodbyes.join(" / ")}
 - "vou levar" → processarVenda(produto: "...")
 - "fecha" → processarVenda(produto: "...")
 
+🔍 SOLICITAR VERIFICAÇÃO - Use quando NÃO ENCONTRAR produto ou informação:
+- Produto não encontrado → solicitarVerificacao(assunto: "verificar se temos...", produtoMencionado: "...")
+- Estoque indisponível → solicitarVerificacao(assunto: "verificar disponibilidade", produtoMencionado: "...")
+- Cliente manda foto de peça → solicitarVerificacao(assunto: "cliente quer essa peça", urgencia: "alta")
+- Preço/tamanho que você não sabe → solicitarVerificacao(assunto: "verificar preço/tamanho...")
+
 ⚠️ NÃO apenas FALE sobre vender - CHAME a função processarVenda!
+
+=== NUNCA DIGA "NÃO TEMOS" OU "SEM ESTOQUE" ===
+Sempre que NÃO encontrar um produto ou informação:
+1. NUNCA diga "não encontrei" ou "não temos"
+2. Diga algo como "Deixa eu verificar aqui!" 
+3. CHAME solicitarVerificacao() imediatamente
+4. A equipe vai verificar e responder ao cliente
 
 === PROIBIDO INVENTAR ===
 - NÃO invente preços, tamanhos ou cores
 - NÃO invente chave PIX ou dados de pagamento
 - NÃO invente endereço ou horário
-- Se não souber: "Deixa eu ver aqui!" (e use buscarProduto)
+- Se não souber → CHAME solicitarVerificacao()
 
 === RETIRADA NA LOJA ===
 Trabalhamos APENAS com retirada na loja. NÃO fazemos entrega!
@@ -634,6 +655,31 @@ Use essas informações para personalizar o atendimento!`;
 Você ainda não tem dados sobre produtos específicos.
 Se cliente perguntar detalhes, diga: "Deixa eu ver aqui e te passo!"`;
     }
+
+    // Seção CRÍTICA para garantir que IA use apenas treinamento
+    prompt += `
+
+=== 🚫 REGRA CRÍTICA: PRIORIZE SEU TREINAMENTO ===
+Você DEVE responder com base nas informações do CONTEXTO DE TREINAMENTO que você recebeu.
+
+QUANDO CLIENTE PERGUNTAR SOBRE PRODUTOS:
+1. Se você tem a informação no treinamento → Responda com ela
+2. Se NÃO tem → Diga: "Deixa eu checar aqui!" e use buscarProduto()
+3. NUNCA invente preços, tamanhos, cores ou disponibilidade
+
+PROIBIDO INVENTAR:
+❌ Preços que você não sabe
+❌ Tamanhos disponíveis sem certeza  
+❌ Cores que não estão no treinamento
+❌ Chave PIX ou dados de pagamento
+❌ Horários de funcionamento não confirmados
+
+SE NÃO SOUBER, DIGA:
+✅ "Deixa eu verificar aqui rapidinho!"
+✅ "Vou checar e te passo!"
+✅ "Só um momento que confirmo!"
+
+E ENTÃO use buscarProduto() para buscar a informação correta.`;
 
     return prompt;
 }

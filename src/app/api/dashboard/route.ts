@@ -26,6 +26,7 @@ export async function GET() {
             sessionsCount,
             connectedSessionsCount,
             conversationsCount,
+            waitingResponseCount,
             messagesCount,
             trainingCount,
             // Trends - current month
@@ -40,6 +41,7 @@ export async function GET() {
             prisma.whatsAppSession.count({ where: { companyId } }),
             prisma.whatsAppSession.count({ where: { companyId, status: "CONNECTED" } }),
             prisma.conversation.count({ where: { companyId } }),
+            prisma.conversation.count({ where: { companyId, status: "WAITING_RESPONSE" } }),
             prisma.message.count({
                 where: {
                     conversation: { companyId }
@@ -121,6 +123,7 @@ export async function GET() {
                 sessions: sessionsCount,
                 connectedSessions: connectedSessionsCount,
                 conversations: conversationsCount,
+                waitingResponse: waitingResponseCount,
                 messages: messagesCount,
                 trainingData: trainingCount,
             },

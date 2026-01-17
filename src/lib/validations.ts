@@ -123,7 +123,7 @@ export const sendMessageSchema = z.object({
 });
 
 export const updateConversationSchema = z.object({
-    status: z.enum(["OPEN", "AI_HANDLING", "HUMAN_HANDLING", "CLOSED"]).optional(),
+    status: z.enum(["OPEN", "AI_HANDLING", "HUMAN_HANDLING", "WAITING_RESPONSE", "CLOSED"]).optional(),
     agentId: z.string().nullable().optional(),
 });
 

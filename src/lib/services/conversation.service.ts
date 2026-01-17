@@ -11,7 +11,7 @@ import type { Prisma } from "@prisma/client";
 interface ListConversationsOptions {
     limit?: number;
     offset?: number;
-    status?: "OPEN" | "AI_HANDLING" | "HUMAN_HANDLING" | "CLOSED";
+    status?: "OPEN" | "AI_HANDLING" | "HUMAN_HANDLING" | "WAITING_RESPONSE" | "CLOSED";
     search?: string;
 }
 
@@ -139,14 +139,15 @@ export class ConversationService {
      * Get conversation statistics
      */
     static async getStats(companyId: string) {
-        const [total, open, aiHandling, humanHandling, closed] = await Promise.all([
+        const [total, open, aiHandling, humanHandling, waitingResponse, closed] = await Promise.all([
             prisma.conversation.count({ where: { companyId } }),
             prisma.conversation.count({ where: { companyId, status: "OPEN" } }),
             prisma.conversation.count({ where: { companyId, status: "AI_HANDLING" } }),
             prisma.conversation.count({ where: { companyId, status: "HUMAN_HANDLING" } }),
+            prisma.conversation.count({ where: { companyId, status: "WAITING_RESPONSE" } }),
             prisma.conversation.count({ where: { companyId, status: "CLOSED" } }),
         ]);
 
-        return { total, open, aiHandling, humanHandling, closed };
+        return { total, open, aiHandling, humanHandling, waitingResponse, closed };
     }
 }

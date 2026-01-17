@@ -316,6 +316,42 @@ Resposta padrão: "Trabalhamos apenas com retirada na loja!"`,
                 required: ["resumoConversa"]
             }
         }
+    },
+    {
+        type: "function" as const,
+        function: {
+            name: "solicitarVerificacao",
+            description: `🔴 OBRIGATÓRIO: Use quando NÃO encontrar informação ou produto!
+
+⚠️ CHAME ESTA FUNÇÃO quando:
+- Produto não encontrado no catálogo
+- Estoque zerado ou indisponível
+- Cliente manda foto de peça que quer comprar
+- Qualquer informação que você NÃO tem certeza
+- Preço, tamanho ou cor que você não sabe
+
+NUNCA diga "não temos" ou "não encontrei" - SEMPRE use esta função!
+A equipe vai verificar e responder ao cliente.`,
+            parameters: {
+                type: "object",
+                properties: {
+                    assunto: {
+                        type: "string",
+                        description: "O que precisa ser verificado com a equipe"
+                    },
+                    produtoMencionado: {
+                        type: "string",
+                        description: "Nome do produto/peça mencionado pelo cliente"
+                    },
+                    urgencia: {
+                        type: "string",
+                        enum: ["baixa", "media", "alta"],
+                        description: "baixa = apenas curiosidade, media = quer comprar, alta = já decidiu comprar"
+                    }
+                },
+                required: ["assunto"]
+            }
+        }
     }
 ];
 
@@ -411,11 +447,14 @@ async function buscarProduto(
 
             // Verificar estoque
             let stockInfo = "";
+            let needsStockVerification = false;
             if (bestMatch.stockEnabled) {
                 if (bestMatch.stockQuantity > 0) {
                     stockInfo = `\n✅ Temos ${bestMatch.stockQuantity} unidades em estoque!`;
                 } else {
-                    stockInfo = "\n⚠️ No momento estamos sem estoque deste produto.";
+                    // NÃO dizer que está sem estoque - pedir verificação
+                    stockInfo = "\n⏳ Deixa eu confirmar a disponibilidade...";
+                    needsStockVerification = true;
                 }
             }
 
@@ -433,6 +472,7 @@ async function buscarProduto(
                     sendProductImage: hasImage, // Flag para o worker enviar a imagem
                     stockAvailable: !bestMatch.stockEnabled || bestMatch.stockQuantity > 0,
                     stockQuantity: bestMatch.stockQuantity,
+                    needsStockVerification, // Nova flag para IA chamar solicitarVerificacao
                 }
             };
         }
@@ -451,10 +491,15 @@ async function buscarProduto(
         });
 
         if (trainingData.length === 0) {
+            // NÃO dizer que não tem - retornar para IA chamar solicitarVerificacao
             return {
                 success: true,
-                message: `Hmm, não encontrei "${termo}" no nosso catálogo. 🤔\n\nQuer que eu veja outros produtos similares ou posso chamar alguém da equipe pra te ajudar?`,
-                data: { found: false }
+                message: `Boa pergunta sobre "${termo}"! Deixa eu verificar aqui...`,
+                data: {
+                    found: false,
+                    needsVerification: true,
+                    searchTerm: termo
+                }
             };
         }
 
@@ -542,6 +587,90 @@ async function transferirParaHumano(
         return {
             success: false,
             message: "Opa, tive um probleminha aqui. Mas relaxa que alguém da equipe já vai te atender!",
+        };
+    }
+}
+
+/**
+ * Solicita verificação da equipe quando IA não sabe responder
+ * Muda status para WAITING_RESPONSE e registra o que precisa ser verificado
+ */
+async function solicitarVerificacao(
+    args: Record<string, unknown>,
+    context: FunctionContext
+): Promise<FunctionResult> {
+    const assunto = args.assunto as string;
+    const produtoMencionado = args.produtoMencionado as string | undefined;
+    const urgencia = (args.urgencia as string) || "media";
+
+    try {
+        // Buscar dados da conversa para contexto
+        const conversation = await prisma.conversation.findUnique({
+            where: { id: context.conversationId },
+            select: { customerPhone: true, customerName: true },
+        });
+
+        // Atualizar status para WAITING_RESPONSE
+        await prisma.conversation.update({
+            where: { id: context.conversationId },
+            data: {
+                status: "WAITING_RESPONSE",
+            },
+        });
+
+        // Log da solicitação de verificação (será visível no histórico de auditoria)
+        await prisma.auditLog.create({
+            data: {
+                action: "AI_REQUESTED_VERIFICATION",
+                entity: "Conversation",
+                entityId: context.conversationId,
+                companyId: context.companyId,
+                changes: JSON.stringify({
+                    assunto,
+                    produtoMencionado,
+                    urgencia,
+                    customerName: conversation?.customerName,
+                    customerPhone: conversation?.customerPhone
+                }),
+                userEmail: "system@ai",
+            },
+        });
+
+        // Dispatch webhook para notificação externa
+        dispatchWebhook(context.companyId, "VERIFICATION_REQUESTED", {
+            conversationId: context.conversationId,
+            customerPhone: conversation?.customerPhone,
+            customerName: conversation?.customerName,
+            subject: assunto,
+            product: produtoMencionado,
+            urgency: urgencia,
+            timestamp: new Date().toISOString(),
+        }).catch((err) => console.error("[Webhook] VERIFICATION_REQUESTED failed:", err));
+
+        // Mensagens variadas para parecer natural
+        const messages = [
+            "Boa pergunta! Deixa eu verificar aqui com a equipe e já te dou um retorno! 👍",
+            "Vou checar isso aqui rapidinho! Já já te passo a informação! ⏳",
+            "Hmm, deixa eu confirmar com o pessoal... Já volto! 😊",
+            "Ótima pergunta! Vou verificar e te retorno em seguida!",
+        ];
+        const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+
+        return {
+            success: true,
+            message: randomMessage,
+            data: {
+                verificationRequested: true,
+                subject: assunto,
+                product: produtoMencionado,
+                urgency: urgencia,
+            }
+        };
+    } catch (error) {
+        console.error("[AI Functions] Error in solicitarVerificacao:", error);
+        return {
+            success: false,
+            message: "Deixa eu verificar aqui... Já te retorno!",
         };
     }
 }
@@ -1291,6 +1420,7 @@ const FUNCTION_MAP: Record<string, (args: Record<string, unknown>, ctx: Function
     transferirParaHumano,
     registrarInteresse,
     processarVenda,
+    solicitarVerificacao,
     agendarReuniao,
     agendarConsulta,
     solicitarOrcamento,

@@ -35,7 +35,7 @@ export default function AwaitingResponsePage() {
     const fetchConversations = async () => {
         try {
             setLoading(true);
-            const res = await fetch("/api/conversations?status=NEEDS_INFO");
+            const res = await fetch("/api/conversations?status=WAITING_RESPONSE");
             const data = await res.json();
             if (data.success) {
                 setConversations(data.data || []);
@@ -81,7 +81,7 @@ export default function AwaitingResponsePage() {
             await fetch(`/api/conversations/${id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: "ACTIVE" }),
+                body: JSON.stringify({ status: "AI_HANDLING" }),
             });
             fetchConversations();
         } catch (error) {
