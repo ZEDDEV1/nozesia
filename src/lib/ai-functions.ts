@@ -53,17 +53,26 @@ export const AI_TOOLS = [
 - Perguntar sobre uma peça ("tem camiseta?", "vocês têm vestido?")
 - Quiser ver fotos ("manda foto da calça", "quero ver as blusas")
 - Perguntar preço ("quanto é a jaqueta?")
+- Pedir uma COR ESPECÍFICA ("quero ver o marrom", "manda a azul")
+
+⚠️ IMPORTANTE: Se o cliente mencionar uma COR, SEMPRE passe no parâmetro 'cor'!
 
 Exemplos:
-- "manda foto da camiseta" → buscarProduto("camiseta")
-- "tem vestido?" → buscarProduto("vestido")
-- "quanto é a calça jeans?" → buscarProduto("calça jeans")`,
+- "manda foto da camiseta" → buscarProduto(termo: "camiseta")
+- "tem vestido?" → buscarProduto(termo: "vestido")
+- "quero ver o agasalho marrom" → buscarProduto(termo: "agasalho", cor: "marrom")
+- "manda a calça preta" → buscarProduto(termo: "calça", cor: "preta")
+- "quero ver o azul escuro" → buscarProduto(termo: "[produto anterior]", cor: "azul escuro")`,
             parameters: {
                 type: "object",
                 properties: {
                     termo: {
                         type: "string",
-                        description: "Nome simples da peça: 'camiseta', 'vestido', 'calça', 'jaqueta', 'blusa', etc."
+                        description: "Nome da peça: 'camiseta', 'vestido', 'calça', 'agasalho', 'blusa', etc."
+                    },
+                    cor: {
+                        type: "string",
+                        description: "Cor ESPECÍFICA se o cliente mencionar: 'marrom', 'azul', 'preto', 'azul escuro', 'off white', etc. SEMPRE preencha quando o cliente pedir uma cor!"
                     }
                 },
                 required: ["termo"]
@@ -371,6 +380,7 @@ async function buscarProduto(
     context: FunctionContext
 ): Promise<FunctionResult> {
     const termo = (args.termo as string || "").toLowerCase().trim();
+    const cor = (args.cor as string || "").toLowerCase().trim();
 
     if (!termo) {
         return {
@@ -395,7 +405,7 @@ async function buscarProduto(
             include: {
                 category: { select: { name: true } },
             },
-            take: 5,
+            take: 10, // Buscar mais resultados para melhor matching por cor
             orderBy: { name: "asc" },
         });
 
@@ -416,7 +426,7 @@ async function buscarProduto(
                     include: {
                         category: { select: { name: true } },
                     },
-                    take: 5,
+                    take: 10,
                     orderBy: { name: "asc" },
                 });
 
@@ -426,8 +436,26 @@ async function buscarProduto(
             }
         }
 
+        // 3. Se cor foi especificada, priorizar produtos que contenham essa cor
+        if (cor && products.length > 1) {
+            const productWithColor = products.find(p =>
+                p.name.toLowerCase().includes(cor) ||
+                (p.description?.toLowerCase().includes(cor) ?? false)
+            );
+
+            if (productWithColor) {
+                // Reordenar para que o produto com a cor apareça primeiro
+                products = [productWithColor, ...products.filter(p => p.id !== productWithColor.id)];
+                console.log(`[AI Functions] Produto priorizado por cor "${cor}": ${productWithColor.name}`);
+            } else {
+                console.log(`[AI Functions] Nenhum produto encontrado com cor "${cor}" - usando primeiro resultado`);
+            }
+        }
+
         // Se encontrou produtos cadastrados
         if (products.length > 0) {
+            // Limitar a 5 resultados para exibição
+            products = products.slice(0, 5);
             const bestMatch = products[0];
             const priceFormatted = bestMatch.price.toLocaleString("pt-BR", {
                 style: "currency",
