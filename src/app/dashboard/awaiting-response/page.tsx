@@ -36,9 +36,11 @@ export default function AwaitingResponsePage() {
         try {
             setLoading(true);
             const res = await fetch("/api/conversations?status=WAITING_RESPONSE");
-            const data = await res.json();
-            if (data.success) {
-                setConversations(data.data || []);
+            const response = await res.json();
+            if (response.success) {
+                // A API retorna { success, data: { data: [...], pagination: {...} } }
+                const conversations = response.data?.data || response.data || [];
+                setConversations(Array.isArray(conversations) ? conversations : []);
             }
         } catch (error) {
             console.error("Error fetching awaiting conversations:", error);
