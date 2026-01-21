@@ -3,6 +3,10 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const wppconnect = require('@wppconnect-team/wppconnect');
 const axios = require('axios');
+const { exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
 const app = express();
 app.use(cors());
@@ -23,6 +27,45 @@ let lastSessionCreate = 0;
 // Webhook URL para o Next.js
 const WEBHOOK_URL = process.env.WEBHOOK_URL || 'http://localhost:3000/api/whatsapp/webhook';
 const SECRET_TOKEN = process.env.SECRET_TOKEN || 'AGENTEDEIA_SECRET_2024';
+
+// =============================
+// 🧹 Função: Matar processos Chrome órfãos
+// =============================
+async function killOrphanBrowsers(sessionName) {
+    return new Promise((resolve) => {
+        const tokenPath = path.join(__dirname, 'tokens', sessionName);
+
+        console.log(`>>> [Cleanup] Verificando processos órfãos para sessão ${sessionName}...`);
+
+        // Remove SingletonLock file if exists
+        const lockFile = path.join(tokenPath, 'SingletonLock');
+        if (fs.existsSync(lockFile)) {
+            try {
+                fs.unlinkSync(lockFile);
+                console.log(`>>> [Cleanup] Removido SingletonLock para ${sessionName}`);
+            } catch (e) {
+                console.log(`>>> [Cleanup] Erro ao remover SingletonLock:`, e.message);
+            }
+        }
+
+        // Kill any chrome/chromium processes using this token folder
+        const killCommands = [
+            `pkill -9 -f "${tokenPath}" 2>/dev/null || true`,
+            `pkill -9 -f "chromium.*${sessionName}" 2>/dev/null || true`,
+            `pkill -9 -f "chrome.*${sessionName}" 2>/dev/null || true`,
+        ];
+
+        exec(killCommands.join(' && '), (error) => {
+            if (error) {
+                console.log(`>>> [Cleanup] Nenhum processo órfão encontrado (normal)`);
+            } else {
+                console.log(`>>> [Cleanup] Processos órfãos eliminados para ${sessionName}`);
+            }
+            // Small delay to ensure processes are fully terminated
+            setTimeout(resolve, 500);
+        });
+    });
+}
 
 // =============================
 // 🔧 Função auxiliar: anexar eventos em um client
@@ -151,6 +194,9 @@ function attachClientEvents(session_name, client) {
 // 🔄 Função: iniciar sessão
 // =============================
 async function startSession(session_name) {
+    // 🧹 Primeiro, limpar qualquer processo órfão
+    await killOrphanBrowsers(session_name);
+
     if (!sessions[session_name]) {
         sessions[session_name] = {
             status: 'CREATING',
@@ -445,9 +491,6 @@ app.post('/api/:session/send-voice-base64', async (req, res) => {
 // ================================================
 // 📌 API: Enviar Arquivo/Documento (PDF, DOC, etc.)
 // ================================================
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
 
 app.post('/api/:session/send-file-base64', async (req, res) => {
     const { session } = req.params;
