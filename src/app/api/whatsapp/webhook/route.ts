@@ -205,6 +205,61 @@ export async function POST(request: Request) {
         const event = body.event || body.type;
         const session = body.session;
 
+        // ==========================================
+        // HANDLE SESSION STATUS CHANGES (connect/disconnect)
+        // ==========================================
+        if (event === "session_status") {
+            const { status, reason } = body;
+
+            logger.whatsapp("Session status change", { session, status, reason });
+
+            if (!session) {
+                return NextResponse.json({ success: true });
+            }
+
+            // Extract companyId from session name (format: companyId_suffix)
+            const sessionParts = session.split("_");
+            if (sessionParts.length < 2) {
+                return NextResponse.json({ success: true });
+            }
+            const companyId = sessionParts[0];
+
+            // Find and update session in database
+            const dbSession = await prisma.whatsAppSession.findFirst({
+                where: { companyId },
+            });
+
+            if (dbSession) {
+                const newStatus = status === "CONNECTED" ? "CONNECTED" : "DISCONNECTED";
+
+                await prisma.whatsAppSession.update({
+                    where: { id: dbSession.id },
+                    data: {
+                        status: newStatus,
+                        lastSeenAt: new Date(),
+                        qrCode: newStatus === "DISCONNECTED" ? null : dbSession.qrCode,
+                    },
+                });
+
+                logger.whatsapp("Session status updated in database", {
+                    sessionId: dbSession.id,
+                    newStatus,
+                    reason
+                });
+
+                // Emit via WebSocket to update dashboard in real-time
+                try {
+                    const { emitSocketWhatsAppStatus } = await import("@/lib/socket-emit");
+                    await emitSocketWhatsAppStatus(companyId, dbSession.id, newStatus);
+                    logger.whatsapp("Emitted status change via WebSocket", { companyId, newStatus });
+                } catch (socketErr) {
+                    logger.error("Failed to emit status via WebSocket", { error: socketErr });
+                }
+            }
+
+            return NextResponse.json({ success: true });
+        }
+
         if (!event?.includes("message") && event !== "onmessage") {
             logger.debug('Skipping non-message event', { event });
             return NextResponse.json({ success: true });

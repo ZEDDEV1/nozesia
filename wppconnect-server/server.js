@@ -82,7 +82,7 @@ function attachClientEvents(session_name, client) {
     session.reconnecting = false;
     session.qr = null;
 
-    client.onStateChange((state) => {
+    client.onStateChange(async (state) => {
         console.log(`Estado da sessão ${session_name}:`, state);
 
         const badStates = [
@@ -96,9 +96,37 @@ function attachClientEvents(session_name, client) {
             console.log(`>>> Sessão ${session_name} entrou em estado crítico (${state}). Marcando como DISCONNECTED.`);
             session.status = 'DISCONNECTED';
             session.qr = null;
-            // Don't auto-reconnect to avoid browser conflicts
+
+            // 🔔 Notificar Next.js sobre a desconexão
+            try {
+                console.log(`>>> [Webhook] Notificando Next.js sobre desconexão da sessão ${session_name}...`);
+                await axios.post(WEBHOOK_URL, {
+                    event: 'session_status',
+                    session: session_name,
+                    status: 'DISCONNECTED',
+                    reason: state,
+                    timestamp: new Date().toISOString(),
+                });
+                console.log(`>>> [Webhook] Next.js notificado sobre desconexão!`);
+            } catch (webhookErr) {
+                console.error(`>>> [Webhook] Erro ao notificar desconexão:`, webhookErr.message);
+            }
         } else if (state === 'CONNECTED') {
             session.status = 'CONNECTED';
+
+            // 🔔 Notificar Next.js sobre a conexão
+            try {
+                console.log(`>>> [Webhook] Notificando Next.js sobre conexão da sessão ${session_name}...`);
+                await axios.post(WEBHOOK_URL, {
+                    event: 'session_status',
+                    session: session_name,
+                    status: 'CONNECTED',
+                    timestamp: new Date().toISOString(),
+                });
+                console.log(`>>> [Webhook] Next.js notificado sobre conexão!`);
+            } catch (webhookErr) {
+                console.error(`>>> [Webhook] Erro ao notificar conexão:`, webhookErr.message);
+            }
         }
     });
 

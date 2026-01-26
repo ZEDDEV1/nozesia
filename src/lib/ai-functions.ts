@@ -371,19 +371,266 @@ A equipe vai verificar e responder ao cliente.`,
 // FUNCTION IMPLEMENTATIONS
 // ============================================
 
+/**
+ * Mapa de sinônimos para termos de moda/vestuário
+ * Cada grupo contém variações que devem ser tratadas como equivalentes
+ */
+const SYNONYMS_MAP: Record<string, string[]> = {
+    // Calças
+    "calca": ["calça", "calsa", "calças", "calcas", "calsas"],
+    "calça": ["calca", "calsa", "calças", "calcas", "calsas"],
 
+    // Camisetas
+    "camiseta": ["camisa", "camisetas", "camisas", "blusa"],
+    "camisa": ["camiseta", "camisetas", "camisas", "blusa"],
 
+    // Agasalhos
+    "agasalho": ["casaco", "jaqueta", "moletom", "blusa de frio", "agasalhos", "casacos", "jaquetas"],
+    "casaco": ["agasalho", "jaqueta", "moletom", "blusa de frio"],
+    "jaqueta": ["agasalho", "casaco", "moletom"],
+    "moletom": ["agasalho", "casaco", "jaqueta"],
 
+    // Bonés
+    "bone": ["boné", "bonés", "bones", "cap", "chapeu", "chapéu", "touca"],
+    "boné": ["bone", "bonés", "bones", "cap", "chapeu", "chapéu", "touca"],
 
+    // Bermudas
+    "bermuda": ["bermudas", "shorts", "short"],
+    "shorts": ["bermuda", "bermudas", "short"],
 
+    // Vestidos
+    "vestido": ["vestidos", "dress"],
 
+    // Saias
+    "saia": ["saias"],
+
+    // Calçados
+    "tenis": ["tênis", "sapatenis", "sapatênis", "sneaker", "sneakers"],
+    "tênis": ["tenis", "sapatenis", "sapatênis", "sneaker", "sneakers"],
+};
+
+/**
+ * Subtipos específicos que devem ser tratados como filtros adicionais
+ * Se o cliente pedir "camisa polo", só retorna camisas COM polo no nome
+ */
+const PRODUCT_SUBTYPES = [
+    "polo",
+    "jeans",
+    "social",
+    "esportivo",
+    "esportiva",
+    "cargo",
+    "skinny",
+    "slim",
+    "wide",
+    "oversize",
+    "cropped",
+    "básico",
+    "basico",
+    "básica",
+    "basica",
+];
+
+/**
+ * Expande um termo com seus sinônimos
+ */
+function expandTermWithSynonyms(term: string): string[] {
+    const normalized = normalizeText(term);
+    const words = normalized.split(" ");
+    const expandedTerms: Set<string> = new Set([normalized]);
+
+    for (const word of words) {
+        // Adicionar sinônimos da palavra
+        const synonyms = SYNONYMS_MAP[word];
+        if (synonyms) {
+            for (const syn of synonyms) {
+                // Substituir a palavra pelo sinônimo no termo original
+                const expandedTerm = normalized.replace(word, normalizeText(syn));
+                expandedTerms.add(expandedTerm);
+                expandedTerms.add(normalizeText(syn)); // Também adiciona só o sinônimo
+            }
+        }
+    }
+
+    return Array.from(expandedTerms);
+}
+
+/**
+ * Extrai subtipos do termo de busca
+ */
+function extractSubtypes(term: string): { mainTerm: string; subtypes: string[] } {
+    const normalized = normalizeText(term);
+    const words = normalized.split(" ");
+    const subtypes: string[] = [];
+    const mainWords: string[] = [];
+
+    for (const word of words) {
+        if (PRODUCT_SUBTYPES.includes(word)) {
+            subtypes.push(word);
+        } else {
+            mainWords.push(word);
+        }
+    }
+
+    return {
+        mainTerm: mainWords.join(" "),
+        subtypes
+    };
+}
+
+/**
+ * Normaliza texto removendo acentos e caracteres especiais
+ */
+function normalizeText(text: string): string {
+    return text
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+        .replace(/[^a-z0-9\s]/g, " ") // Remove caracteres especiais
+        .replace(/\s+/g, " ") // Normaliza espaços
+        .trim();
+}
+
+/**
+ * Calcula pontuação de relevância de um produto
+ * Usa sinônimos e penaliza ausência de subtipos específicos
+ */
+function calculateProductScore(
+    product: { name: string; description: string | null; colors: string[] },
+    searchTerm: string,
+    searchColor: string
+): number {
+    let score = 0;
+    const normalizedName = normalizeText(product.name);
+    const normalizedDescription = normalizeText(product.description || "");
+    const normalizedColor = normalizeText(searchColor);
+
+    // Extrair subtipos do termo de busca (polo, jeans, social, etc)
+    const { mainTerm, subtypes } = extractSubtypes(searchTerm);
+    const normalizedMainTerm = normalizeText(mainTerm);
+
+    // Expandir termo principal com sinônimos
+    const expandedTerms = expandTermWithSynonyms(mainTerm);
+
+    // === PONTUAÇÃO POR NOME (testando termo principal e sinônimos) ===
+
+    let bestNameScore = 0;
+    for (const term of expandedTerms) {
+        let termScore = 0;
+
+        // Match exato no nome (100 pontos)
+        if (normalizedName === term) {
+            termScore = 100;
+        }
+        // Nome começa com o termo (80 pontos)
+        else if (normalizedName.startsWith(term)) {
+            termScore = 80;
+        }
+        // Nome contém o termo como palavra (60 pontos)
+        else if (normalizedName.split(" ").some(word => word === term || term.split(" ").includes(word))) {
+            termScore = 60;
+        }
+        // Nome contém o termo (40 pontos)
+        else if (normalizedName.includes(term) || term.split(" ").some(w => w.length >= 3 && normalizedName.includes(w))) {
+            termScore = 40;
+        }
+
+        bestNameScore = Math.max(bestNameScore, termScore);
+    }
+    score += bestNameScore;
+
+    // Palavras individuais do termo no nome (10 pontos cada)
+    const termWords = normalizedMainTerm.split(" ").filter(w => w.length >= 3);
+    for (const word of termWords) {
+        if (normalizedName.includes(word)) {
+            score += 10;
+        }
+        // Também verifica sinônimos da palavra
+        const synonyms = SYNONYMS_MAP[word];
+        if (synonyms) {
+            for (const syn of synonyms) {
+                if (normalizedName.includes(normalizeText(syn))) {
+                    score += 8;
+                    break;
+                }
+            }
+        }
+    }
+
+    // === PONTUAÇÃO/PENALIZAÇÃO POR SUBTIPO ===
+
+    if (subtypes.length > 0) {
+        let hasAllSubtypes = true;
+        for (const subtype of subtypes) {
+            const normalizedSubtype = normalizeText(subtype);
+            const hasSubtypeInName = normalizedName.includes(normalizedSubtype);
+            const hasSubtypeInDesc = normalizedDescription.includes(normalizedSubtype);
+
+            if (hasSubtypeInName) {
+                // Bônus por ter o subtipo no nome (muito relevante!)
+                score += 50;
+            } else if (hasSubtypeInDesc) {
+                // Subtipo na descrição vale menos
+                score += 20;
+            } else {
+                // Produto NÃO tem o subtipo pedido
+                hasAllSubtypes = false;
+            }
+        }
+
+        // Se o cliente pediu um subtipo específico e o produto NÃO tem,
+        // penaliza FORTEMENTE para que não apareça nos resultados
+        if (!hasAllSubtypes) {
+            score -= 100;
+        }
+    }
+
+    // === PONTUAÇÃO POR COR ===
+
+    if (normalizedColor) {
+        // Cor exata no campo colors[] (50 pontos)
+        const normalizedColors = product.colors.map(c => normalizeText(c));
+        if (normalizedColors.some(c => c === normalizedColor || c.includes(normalizedColor))) {
+            score += 50;
+        }
+        // Cor no nome (40 pontos)
+        else if (normalizedName.includes(normalizedColor)) {
+            score += 40;
+        }
+        // Cor na descrição (20 pontos)
+        else if (normalizedDescription.includes(normalizedColor)) {
+            score += 20;
+        }
+    }
+
+    // === PONTUAÇÃO POR DESCRIÇÃO ===
+
+    // Termo na descrição (15 pontos)
+    for (const term of expandedTerms) {
+        if (normalizedDescription.includes(term)) {
+            score += 15;
+            break;
+        }
+    }
+
+    // Palavras do termo na descrição (5 pontos cada)
+    for (const word of termWords) {
+        if (normalizedDescription.includes(word)) {
+            score += 5;
+        }
+    }
+
+    return score;
+}
 
 async function buscarProduto(
     args: Record<string, unknown>,
     context: FunctionContext
 ): Promise<FunctionResult> {
-    const termo = (args.termo as string || "").toLowerCase().trim();
-    const cor = (args.cor as string || "").toLowerCase().trim();
+    const termo = (args.termo as string || "").trim();
+    const cor = (args.cor as string || "").trim();
+    const normalizedTermo = normalizeText(termo);
+    const normalizedCor = normalizeText(cor);
 
     if (!termo) {
         return {
@@ -392,183 +639,166 @@ async function buscarProduto(
         };
     }
 
+    console.log(`[AI Functions] 🔍 Buscando: termo="${termo}", cor="${cor}"`);
+
     try {
-        // 1. Buscar na tabela Product (prioridade)
-        // Primeiro tenta busca exata/parcial com o termo completo
-        let products = await prisma.product.findMany({
+        // 1. Buscar TODOS os produtos ativos da empresa
+        // (busca mais ampla para depois ranquear)
+        const allProducts = await prisma.product.findMany({
             where: {
                 companyId: context.companyId,
                 isActive: true,
-                OR: [
-                    { name: { contains: termo, mode: "insensitive" } },
-                    { description: { contains: termo, mode: "insensitive" } },
-                    { category: { name: { contains: termo, mode: "insensitive" } } },
-                ],
             },
             include: {
                 category: { select: { name: true } },
             },
-            take: 10, // Buscar mais resultados para melhor matching por cor
-            orderBy: { name: "asc" },
         });
 
-        // 2. Se não encontrou, buscar por palavras individuais
-        if (products.length === 0) {
-            const palavras = termo.split(/\s+/).filter(p => p.length >= 3);
+        if (allProducts.length === 0) {
+            return {
+                success: true,
+                message: `Deixa eu verificar aqui sobre "${termo}"...`,
+                data: { found: false, needsVerification: true, searchTerm: termo }
+            };
+        }
+
+        // 2. Calcular pontuação para cada produto
+        const scoredProducts = allProducts.map(product => ({
+            ...product,
+            score: calculateProductScore(
+                { name: product.name, description: product.description, colors: product.colors || [] },
+                normalizedTermo,
+                normalizedCor
+            )
+        }));
+
+        // 3. Filtrar produtos com pontuação > 0 e ordenar por relevância
+        let relevantProducts = scoredProducts
+            .filter(p => p.score > 0)
+            .sort((a, b) => b.score - a.score);
+
+        console.log(`[AI Functions] 📊 Produtos encontrados com score > 0: ${relevantProducts.length}`);
+
+        // Log dos top 3 para debug
+        relevantProducts.slice(0, 3).forEach((p, i) => {
+            console.log(`[AI Functions]   ${i + 1}. ${p.name} (score: ${p.score})`);
+        });
+
+        // 4. Se nenhum produto teve score, fazer busca mais flexível
+        if (relevantProducts.length === 0) {
+            // Tenta busca por palavras individuais
+            const palavras = normalizedTermo.split(" ").filter(p => p.length >= 3);
 
             if (palavras.length > 0) {
-                products = await prisma.product.findMany({
-                    where: {
-                        companyId: context.companyId,
-                        isActive: true,
-                        OR: palavras.flatMap(palavra => [
-                            { name: { contains: palavra, mode: "insensitive" } },
-                            { description: { contains: palavra, mode: "insensitive" } },
-                        ]),
-                    },
-                    include: {
-                        category: { select: { name: true } },
-                    },
-                    take: 10,
-                    orderBy: { name: "asc" },
-                });
+                relevantProducts = scoredProducts
+                    .map(product => {
+                        let flexScore = 0;
+                        const normalizedName = normalizeText(product.name);
+                        const normalizedDesc = normalizeText(product.description || "");
 
-                if (products.length > 0) {
-                    console.log(`[AI Functions] Produto encontrado por busca de palavras: "${palavras.join(", ")}" → ${products[0].name}`);
-                }
+                        for (const palavra of palavras) {
+                            if (normalizedName.includes(palavra)) flexScore += 20;
+                            if (normalizedDesc.includes(palavra)) flexScore += 5;
+                        }
+
+                        return { ...product, score: flexScore };
+                    })
+                    .filter(p => p.score > 0)
+                    .sort((a, b) => b.score - a.score);
+
+                console.log(`[AI Functions] 🔄 Busca flexível por palavras encontrou: ${relevantProducts.length}`);
             }
         }
 
-        // 3. Se cor foi especificada, priorizar produtos que contenham essa cor
-        if (cor && products.length > 1) {
-            const productWithColor = products.find(p =>
-                p.name.toLowerCase().includes(cor) ||
-                (p.description?.toLowerCase().includes(cor) ?? false)
-            );
-
-            if (productWithColor) {
-                // Reordenar para que o produto com a cor apareça primeiro
-                products = [productWithColor, ...products.filter(p => p.id !== productWithColor.id)];
-                console.log(`[AI Functions] Produto priorizado por cor "${cor}": ${productWithColor.name}`);
-            } else {
-                console.log(`[AI Functions] Nenhum produto encontrado com cor "${cor}" - usando primeiro resultado`);
-            }
-        }
-
-        // Se encontrou produtos cadastrados
-        if (products.length > 0) {
-            // Limitar a 5 resultados para exibição
-            products = products.slice(0, 5);
-            const bestMatch = products[0];
-            const priceFormatted = bestMatch.price.toLocaleString("pt-BR", {
-                style: "currency",
-                currency: "BRL",
-            });
-
-            // Se tem imagem, sinaliza para enviar
-            const hasImage = !!bestMatch.imageUrl;
-
-            // Montar lista de produtos se houver mais de um
-            const productList = products.length > 1
-                ? "\n\n📦 *Outros resultados:*\n" + products.slice(1).map((p: typeof products[0]) => {
-                    const pFormatted = p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-                    return `• ${p.name} - ${pFormatted}`;
-                }).join("\n")
-                : "";
-
-            // Verificar estoque
-            let stockInfo = "";
-            let needsStockVerification = false;
-            if (bestMatch.stockEnabled) {
-                if (bestMatch.stockQuantity > 0) {
-                    stockInfo = `\n✅ Temos ${bestMatch.stockQuantity} unidades em estoque!`;
-                } else {
-                    // NÃO dizer que está sem estoque - pedir verificação
-                    stockInfo = "\n⏳ Deixa eu confirmar a disponibilidade...";
-                    needsStockVerification = true;
-                }
-            }
-
-            // 📐 Buscar tamanhos disponíveis
-            let sizesInfo = "";
-            let availableSizes: string[] = [];
-
-            // 1. Primeiro, verificar se tem variantes com estoque (mais preciso)
-            const variants = await prisma.productVariant.findMany({
-                where: {
-                    productId: bestMatch.id,
-                    stock: { gt: 0 }
-                },
-                select: { size: true, stock: true }
-            });
-
-            if (variants.length > 0) {
-                // Usar tamanhos das variantes com estoque
-                availableSizes = [...new Set(variants.map(v => v.size))];
-                sizesInfo = `\n📐 *Tamanhos disponíveis:* ${availableSizes.join(", ")}`;
-                console.log(`[AI Functions] Tamanhos com estoque (variantes): ${availableSizes.join(", ")}`);
-            } else if (bestMatch.sizes && bestMatch.sizes.length > 0) {
-                // 2. Fallback: usar campo sizes do produto
-                availableSizes = bestMatch.sizes;
-                sizesInfo = `\n📐 *Tamanhos:* ${availableSizes.join(", ")}`;
-                console.log(`[AI Functions] Tamanhos cadastrados (produto): ${availableSizes.join(", ")}`);
-            }
-
+        // 5. Ainda sem resultados? Retorna para verificação
+        if (relevantProducts.length === 0) {
+            console.log(`[AI Functions] ❌ Nenhum produto encontrado para "${termo}"`);
             return {
                 success: true,
-                message: `Achei! 🎉\n\n📦 *${bestMatch.name}*\n💰 *Preço:* ${priceFormatted}${bestMatch.category ? `\n🏷️ Categoria: ${bestMatch.category.name}` : ""}${sizesInfo}${bestMatch.description ? `\n📝 ${bestMatch.description.substring(0, 150)}${bestMatch.description.length > 150 ? "..." : ""}` : ""}${stockInfo}${productList}\n\n*Deseja comprar?* Posso gerar o pedido pra você! 🛒`,
-                data: {
-                    found: true,
-                    productId: bestMatch.id,
-                    productName: bestMatch.name,
-                    productPrice: bestMatch.price,
-                    priceFormatted,
-                    hasImage,
-                    imageUrl: bestMatch.imageUrl,
-                    sendProductImage: hasImage, // Flag para o worker enviar a imagem
-                    stockAvailable: !bestMatch.stockEnabled || bestMatch.stockQuantity > 0,
-                    stockQuantity: bestMatch.stockQuantity,
-                    availableSizes, // Tamanhos disponíveis para a IA saber
-                    needsStockVerification, // Nova flag para IA chamar solicitarVerificacao
-                }
+                message: `Deixa eu verificar aqui sobre "${termo}"...`,
+                data: { found: false, needsVerification: true, searchTerm: termo }
             };
         }
 
-        // 2. Fallback: Buscar no TrainingData do agente
-        const trainingData = await prisma.trainingData.findMany({
-            where: {
-                agentId: context.agentId,
-                OR: [
-                    { title: { contains: termo, mode: "insensitive" } },
-                    { content: { contains: termo, mode: "insensitive" } },
-                ],
-                type: { in: ["PRODUCT", "FAQ", "QA"] }
-            },
-            take: 3,
+        // 6. Limitar a 5 resultados para exibição
+        const products = relevantProducts.slice(0, 5);
+        const bestMatch = products[0];
+
+        console.log(`[AI Functions] ✅ Melhor match: "${bestMatch.name}" (score: ${bestMatch.score})`);
+
+        const priceFormatted = bestMatch.price.toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
         });
 
-        if (trainingData.length === 0) {
-            // NÃO dizer que não tem - retornar para IA chamar solicitarVerificacao
-            return {
-                success: true,
-                message: `Boa pergunta sobre "${termo}"! Deixa eu verificar aqui...`,
-                data: {
-                    found: false,
-                    needsVerification: true,
-                    searchTerm: termo
-                }
-            };
+        // Se tem imagem, sinaliza para enviar
+        const hasImage = !!bestMatch.imageUrl;
+
+        // Montar lista de produtos se houver mais de um
+        const productList = products.length > 1
+            ? "\n\n📦 *Outros resultados:*\n" + products.slice(1).map((p: typeof products[0]) => {
+                const pFormatted = p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+                return `• ${p.name} - ${pFormatted}`;
+            }).join("\n")
+            : "";
+
+        // Verificar estoque
+        let stockInfo = "";
+        let needsStockVerification = false;
+        if (bestMatch.stockEnabled) {
+            if (bestMatch.stockQuantity > 0) {
+                stockInfo = `\n✅ Temos ${bestMatch.stockQuantity} unidades em estoque!`;
+            } else {
+                stockInfo = "\n⏳ Deixa eu confirmar a disponibilidade...";
+                needsStockVerification = true;
+            }
         }
 
-        const results = trainingData.map(td => ({
-            titulo: td.title,
-            info: td.content.substring(0, 200),
-        }));
+        // Buscar tamanhos disponíveis
+        let sizesInfo = "";
+        let availableSizes: string[] = [];
+
+        const variants = await prisma.productVariant.findMany({
+            where: {
+                productId: bestMatch.id,
+                stock: { gt: 0 }
+            },
+            select: { size: true, stock: true }
+        });
+
+        if (variants.length > 0) {
+            availableSizes = [...new Set(variants.map(v => v.size))];
+            sizesInfo = `\n📐 *Tamanhos disponíveis:* ${availableSizes.join(", ")}`;
+        } else if (bestMatch.sizes && bestMatch.sizes.length > 0) {
+            availableSizes = bestMatch.sizes;
+            sizesInfo = `\n📐 *Tamanhos:* ${availableSizes.join(", ")}`;
+        }
+
+        // Cores disponíveis
+        let colorsInfo = "";
+        if (bestMatch.colors && bestMatch.colors.length > 0) {
+            colorsInfo = `\n🎨 *Cores:* ${bestMatch.colors.join(", ")}`;
+        }
 
         return {
             success: true,
-            message: `Achei algumas informações sobre "${termo}"! Vou te passar os detalhes.`,
-            data: { found: true, results, fromTraining: true }
+            message: `Achei! 🎉\n\n📦 *${bestMatch.name}*\n💰 *Preço:* ${priceFormatted}${bestMatch.category ? `\n🏷️ Categoria: ${bestMatch.category.name}` : ""}${colorsInfo}${sizesInfo}${bestMatch.description ? `\n📝 ${bestMatch.description.substring(0, 150)}${bestMatch.description.length > 150 ? "..." : ""}` : ""}${stockInfo}${productList}\n\n*Deseja comprar?* Posso gerar o pedido pra você! 🛒`,
+            data: {
+                found: true,
+                productId: bestMatch.id,
+                productName: bestMatch.name,
+                productPrice: bestMatch.price,
+                priceFormatted,
+                hasImage,
+                imageUrl: bestMatch.imageUrl,
+                sendProductImage: hasImage,
+                stockAvailable: !bestMatch.stockEnabled || bestMatch.stockQuantity > 0,
+                stockQuantity: bestMatch.stockQuantity,
+                availableSizes,
+                availableColors: bestMatch.colors || [],
+                relevanceScore: bestMatch.score,
+                needsStockVerification,
+            }
         };
     } catch (error) {
         console.error("[AI Functions] Error in buscarProduto:", error);
