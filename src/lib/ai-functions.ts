@@ -732,12 +732,9 @@ async function buscarProduto(
 
                 if (relevantFiltered.length > 0) {
                     console.log(`[AI Functions] ✅ Encontrados ${relevantFiltered.length} produtos com subtipo "${subtypes.join(", ")}"`);
-                    // Continuar com estes produtos (pular filtro genérico abaixo)
-                    // Re-atribuir para usar na sequência
-                    let relevantProducts = relevantFiltered;
 
                     // Ir direto para exibição
-                    const products = relevantProducts.slice(0, 5);
+                    const products = relevantFiltered.slice(0, 5);
                     const bestMatch = products[0];
 
                     console.log(`[AI Functions] ✅ Melhor match (com subtipo): "${bestMatch.name}" (score: ${bestMatch.score})`);
