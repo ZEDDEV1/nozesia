@@ -585,20 +585,34 @@ Exemplos de despedida: ${goodbyes.join(" / ")}
 - "vou levar" → processarVenda(produto: "...")
 - "fecha" → processarVenda(produto: "...")
 
-🔍 SOLICITAR VERIFICAÇÃO - Use quando NÃO ENCONTRAR produto ou informação:
-- Produto não encontrado → solicitarVerificacao(assunto: "verificar se temos...", produtoMencionado: "...")
-- Estoque indisponível → solicitarVerificacao(assunto: "verificar disponibilidade", produtoMencionado: "...")
-- Cliente manda foto de peça → solicitarVerificacao(assunto: "cliente quer essa peça", urgencia: "alta")
-- Preço/tamanho que você não sabe → solicitarVerificacao(assunto: "verificar preço/tamanho...")
+=== QUANDO CLIENTE PEDIR OUTROS MODELOS/CORES ===
+SEMPRE use buscarProduto para buscar mais opções!
+
+- "tem outros modelos?" → buscarProduto(termo: "[mesmo produto]")
+- "manda outras cores" → buscarProduto(termo: "[mesmo produto]")
+- "tem mais?" → buscarProduto(termo: "[categoria]")
+- "quero ver outros" → buscarProduto(termo: "[tipo do produto]")
+- "tem diferente?" → buscarProduto(termo: "[produto similar]")
+
+⚠️ NÃO transfira para equipe! Busque primeiro!
+
+🔍 SOLICITAR VERIFICAÇÃO - Use SOMENTE quando:
+- buscarProduto() NÃO ENCONTROU nada → solicitarVerificacao()
+- Cliente perguntou algo que NÃO é produto (frete, PIX, horário) e você não sabe
+- Cliente mandou FOTO de uma peça e quer saber se tem igual
+- Reclamação ou problema com pedido
+
+❌ NÃO USE solicitarVerificacao para:
+- Buscar produtos → USE buscarProduto!
+- Ver outros modelos → USE buscarProduto!
+- Ver outras cores → USE buscarProduto!
 
 ⚠️ NÃO apenas FALE sobre vender - CHAME a função processarVenda!
 
-=== NUNCA DIGA "NÃO TEMOS" OU "SEM ESTOQUE" ===
-Sempre que NÃO encontrar um produto ou informação:
-1. NUNCA diga "não encontrei" ou "não temos"
-2. Diga algo como "Deixa eu verificar aqui!" 
-3. CHAME solicitarVerificacao() imediatamente
-4. A equipe vai verificar e responder ao cliente
+=== NUNCA DIGA "NÃO TEMOS" ===
+1. PRIMEIRO: Use buscarProduto() para tentar achar
+2. Se buscarProduto retornar vazio: "Deixa eu verificar aqui!"
+3. ENTÃO: Use solicitarVerificacao()
 
 === PROIBIDO INVENTAR ===
 - NÃO invente preços, tamanhos ou cores

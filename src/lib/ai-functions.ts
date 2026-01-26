@@ -47,32 +47,47 @@ export const AI_TOOLS = [
         type: "function" as const,
         function: {
             name: "buscarProduto",
-            description: `Busca peças de roupa/acessórios no catálogo e ENVIA A FOTO automaticamente.
-            
-✅ SEMPRE USE quando cliente:
-- Perguntar sobre uma peça ("tem camiseta?", "vocês têm vestido?")
-- Quiser ver fotos ("manda foto da calça", "quero ver as blusas")
-- Perguntar preço ("quanto é a jaqueta?")
-- Pedir uma COR ESPECÍFICA ("quero ver o marrom", "manda a azul")
+            description: `Busca produtos no catálogo e ENVIA A FOTO automaticamente.
 
-⚠️ IMPORTANTE: Se o cliente mencionar uma COR, SEMPRE passe no parâmetro 'cor'!
+✅ SEMPRE USE esta função quando cliente:
+- Perguntar sobre QUALQUER produto ("tem camiseta?", "vocês têm vestido?", "tem chapéu?")
+- Quiser ver fotos ("manda foto", "quero ver", "mostra")
+- Perguntar preço ("quanto é?", "qual o valor?")
+- Pedir cor específica ("quero a azul", "tem em preto?")
+- Pedir OUTROS MODELOS ("tem outros?", "mais opções?", "outros modelos")
+- Pedir OUTRAS CORES ("tem outra cor?", "manda outras cores")
+- Pedir MAIS DO MESMO ("tem mais?", "quero ver outros")
+
+📦 TIPOS DE PRODUTOS (use o nome que cliente falar):
+- Roupas: camiseta, camisa, blusa, vestido, saia, calça, bermuda, shorts
+- Agasalhos: agasalho, casaco, jaqueta, moletom, blusa de frio
+- Acessórios: boné, chapéu, cap, touca, cinto, bolsa
+- Calçados: tênis, sapato, sandália
+
+⚠️ IMPORTANTE:
+- Se cliente pedir COR → passe no parâmetro 'cor'
+- Se cliente pedir "outros modelos" → busque o MESMO tipo de produto
+- NUNCA transfira para equipe sem antes tentar buscarProduto!
 
 Exemplos:
-- "manda foto da camiseta" → buscarProduto(termo: "camiseta")
-- "tem vestido?" → buscarProduto(termo: "vestido")
-- "quero ver o agasalho marrom" → buscarProduto(termo: "agasalho", cor: "marrom")
+- "tem camiseta?" → buscarProduto(termo: "camiseta")
+- "manda foto da blusa" → buscarProduto(termo: "blusa")
+- "quero ver o chapéu" → buscarProduto(termo: "chapéu")
+- "tem agasalho?" → buscarProduto(termo: "agasalho")
 - "manda a calça preta" → buscarProduto(termo: "calça", cor: "preta")
-- "quero ver o azul escuro" → buscarProduto(termo: "[produto anterior]", cor: "azul escuro")`,
+- "tem outros modelos?" → buscarProduto(termo: "[produto que estava vendo]")
+- "manda outras cores" → buscarProduto(termo: "[produto atual]")
+- "quero ver mais" → buscarProduto(termo: "[categoria do produto]")`,
             parameters: {
                 type: "object",
                 properties: {
                     termo: {
                         type: "string",
-                        description: "Nome da peça: 'camiseta', 'vestido', 'calça', 'agasalho', 'blusa', etc."
+                        description: "Nome do produto: camiseta, blusa, vestido, calça, bermuda, agasalho, casaco, jaqueta, moletom, boné, chapéu, etc. Se cliente pedir 'outros modelos', use o mesmo tipo de produto."
                     },
                     cor: {
                         type: "string",
-                        description: "Cor ESPECÍFICA se o cliente mencionar: 'marrom', 'azul', 'preto', 'azul escuro', 'off white', etc. SEMPRE preencha quando o cliente pedir uma cor!"
+                        description: "Cor específica se cliente mencionar: preto, branco, azul, vermelho, marrom, bege, off white, etc. SEMPRE preencha quando cliente pedir cor!"
                     }
                 },
                 required: ["termo"]
@@ -686,7 +701,44 @@ async function buscarProduto(
 
         // 4. Se nenhum produto teve score, fazer busca mais flexível
         if (relevantProducts.length === 0) {
-            // Tenta busca por palavras individuais
+            // Tenta busca por sinônimos expandidos
+            const expandedTerms = expandTermWithSynonyms(termo);
+            console.log(`[AI Functions] 🔄 Tentando sinônimos: ${expandedTerms.join(", ")}`);
+
+            for (const expandedTerm of expandedTerms) {
+                if (expandedTerm === normalizedTermo) continue; // Já tentou esse
+
+                const expandedNorm = normalizeText(expandedTerm);
+                relevantProducts = scoredProducts
+                    .map(product => {
+                        const normalizedName = normalizeText(product.name);
+                        const normalizedDesc = normalizeText(product.description || "");
+                        let flexScore = 0;
+
+                        if (normalizedName.includes(expandedNorm)) flexScore += 40;
+                        if (normalizedDesc.includes(expandedNorm)) flexScore += 10;
+
+                        // Palavras do termo expandido
+                        const words = expandedNorm.split(" ").filter(w => w.length >= 3);
+                        for (const word of words) {
+                            if (normalizedName.includes(word)) flexScore += 20;
+                            if (normalizedDesc.includes(word)) flexScore += 5;
+                        }
+
+                        return { ...product, score: flexScore };
+                    })
+                    .filter(p => p.score > 0)
+                    .sort((a, b) => b.score - a.score);
+
+                if (relevantProducts.length > 0) {
+                    console.log(`[AI Functions] ✅ Encontrado via sinônimo "${expandedTerm}": ${relevantProducts.length} produtos`);
+                    break;
+                }
+            }
+        }
+
+        // 4.5 Ainda sem resultados? Tenta busca por palavras individuais
+        if (relevantProducts.length === 0) {
             const palavras = normalizedTermo.split(" ").filter(p => p.length >= 3);
 
             if (palavras.length > 0) {
@@ -707,6 +759,36 @@ async function buscarProduto(
                     .sort((a, b) => b.score - a.score);
 
                 console.log(`[AI Functions] 🔄 Busca flexível por palavras encontrou: ${relevantProducts.length}`);
+            }
+        }
+
+        // 4.6 Ainda sem resultados? Mostrar produtos populares
+        if (relevantProducts.length === 0) {
+            console.log(`[AI Functions] ⚠️ Nenhum produto encontrado para "${termo}" - mostrando populares`);
+
+            // Buscar produtos mais vendidos como sugestão
+            relevantProducts = scoredProducts
+                .slice(0, 5)
+                .map(p => ({ ...p, score: 1 })); // Score baixo pois são sugestões
+
+            if (relevantProducts.length > 0) {
+                const suggestions = relevantProducts.slice(0, 3).map(p => p.name).join(", ");
+                console.log(`[AI Functions] 💡 Sugerindo: ${suggestions}`);
+
+                return {
+                    success: true,
+                    message: `Não achei exatamente "${termo}", mas temos essas opções que você pode gostar! Quer que eu mostre?`,
+                    data: {
+                        found: false,
+                        hasSuggestions: true,
+                        suggestions: relevantProducts.slice(0, 3).map(p => ({
+                            id: p.id,
+                            name: p.name,
+                            price: p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                        })),
+                        searchTerm: termo
+                    }
+                };
             }
         }
 
