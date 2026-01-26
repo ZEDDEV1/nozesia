@@ -389,29 +389,38 @@ A equipe vai verificar e responder ao cliente.`,
 /**
  * Mapa de sinônimos para termos de moda/vestuário
  * Cada grupo contém variações que devem ser tratadas como equivalentes
+ * IMPORTANTE: Cada termo deve mapear para TODOS os outros do mesmo grupo
  */
 const SYNONYMS_MAP: Record<string, string[]> = {
-    // Calças
+    // Calças (todos os termos mapeiam para todos)
     "calca": ["calça", "calsa", "calças", "calcas", "calsas"],
     "calça": ["calca", "calsa", "calças", "calcas", "calsas"],
+    "calsa": ["calça", "calca", "calças", "calcas", "calsas"],
 
-    // Camisetas
-    "camiseta": ["camisa", "camisetas", "camisas", "blusa"],
-    "camisa": ["camiseta", "camisetas", "camisas", "blusa"],
+    // Camisetas/Camisas/Blusas (intercambiáveis)
+    "camiseta": ["camisa", "camisetas", "camisas", "blusa", "blusas"],
+    "camisa": ["camiseta", "camisetas", "camisas", "blusa", "blusas"],
+    "blusa": ["camiseta", "camisa", "camisetas", "camisas", "blusas"],
+    "blusas": ["camiseta", "camisa", "camisetas", "camisas", "blusa"],
 
-    // Agasalhos
+    // Agasalhos (todos são equivalentes)
     "agasalho": ["casaco", "jaqueta", "moletom", "blusa de frio", "agasalhos", "casacos", "jaquetas"],
-    "casaco": ["agasalho", "jaqueta", "moletom", "blusa de frio"],
-    "jaqueta": ["agasalho", "casaco", "moletom"],
-    "moletom": ["agasalho", "casaco", "jaqueta"],
+    "casaco": ["agasalho", "jaqueta", "moletom", "blusa de frio", "agasalhos", "casacos", "jaquetas"],
+    "jaqueta": ["agasalho", "casaco", "moletom", "blusa de frio", "agasalhos", "casacos", "jaquetas"],
+    "moletom": ["agasalho", "casaco", "jaqueta", "blusa de frio", "agasalhos", "casacos", "jaquetas"],
 
-    // Bonés
+    // Bonés/Chapéus (BIDIRECIONAL - chapéu encontra boné e vice-versa)
     "bone": ["boné", "bonés", "bones", "cap", "chapeu", "chapéu", "touca"],
     "boné": ["bone", "bonés", "bones", "cap", "chapeu", "chapéu", "touca"],
+    "chapeu": ["boné", "bone", "bonés", "bones", "cap", "chapéu", "touca"],
+    "chapéu": ["boné", "bone", "bonés", "bones", "cap", "chapeu", "touca"],
+    "cap": ["boné", "bone", "bonés", "bones", "chapeu", "chapéu", "touca"],
+    "touca": ["boné", "bone", "bonés", "bones", "cap", "chapeu", "chapéu"],
 
-    // Bermudas
+    // Bermudas/Shorts
     "bermuda": ["bermudas", "shorts", "short"],
     "shorts": ["bermuda", "bermudas", "short"],
+    "short": ["bermuda", "bermudas", "shorts"],
 
     // Vestidos
     "vestido": ["vestidos", "dress"],
