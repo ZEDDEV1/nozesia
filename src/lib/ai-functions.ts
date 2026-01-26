@@ -656,14 +656,23 @@ async function buscarProduto(
     const normalizedTermo = normalizeText(termo);
     const normalizedCor = normalizeText(cor);
 
+    // Extrair subtipos do termo de busca
+    const { mainTerm, subtypes } = extractSubtypes(termo);
+
+    console.log(`[AI Functions] ========================================`);
+    console.log(`[AI Functions] 🔍 BUSCA DE PRODUTO INICIADA`);
+    console.log(`[AI Functions] 📝 Termo original: "${termo}"`);
+    console.log(`[AI Functions] 📝 Termo principal: "${mainTerm}"`);
+    console.log(`[AI Functions] 🏷️ Subtipos extraídos: ${subtypes.length > 0 ? subtypes.join(", ") : "(nenhum)"}`);
+    console.log(`[AI Functions] 🎨 Cor: ${cor || "(nenhuma)"}`);
+    console.log(`[AI Functions] ========================================`);
+
     if (!termo) {
         return {
             success: false,
             message: "Me diz o nome do produto que você procura! 😊",
         };
     }
-
-    console.log(`[AI Functions] 🔍 Buscando: termo="${termo}", cor="${cor}"`);
 
     try {
         // 1. Buscar TODOS os produtos ativos da empresa
@@ -695,6 +704,110 @@ async function buscarProduto(
                 normalizedCor
             )
         }));
+
+        // 2.5 FILTRO ESTRITO DE SUBTIPO
+        // Se cliente pediu subtipo específico (polo, jeans, social), filtrar APENAS produtos que contêm
+        if (subtypes.length > 0) {
+            console.log(`[AI Functions] 🏷️ Aplicando filtro estrito para subtipos: ${subtypes.join(", ")}`);
+
+            const beforeCount = scoredProducts.length;
+            const filteredBySubtype = scoredProducts.filter(product => {
+                const normalizedName = normalizeText(product.name);
+                const normalizedDesc = normalizeText(product.description || "");
+
+                // Produto deve conter TODOS os subtipos
+                return subtypes.every(subtype => {
+                    const normalizedSubtype = normalizeText(subtype);
+                    return normalizedName.includes(normalizedSubtype) || normalizedDesc.includes(normalizedSubtype);
+                });
+            });
+
+            console.log(`[AI Functions] 🏷️ Filtro de subtipo: ${beforeCount} → ${filteredBySubtype.length} produtos`);
+
+            if (filteredBySubtype.length > 0) {
+                // Usar apenas produtos filtrados
+                const relevantFiltered = filteredBySubtype
+                    .filter(p => p.score > 0)
+                    .sort((a, b) => b.score - a.score);
+
+                if (relevantFiltered.length > 0) {
+                    console.log(`[AI Functions] ✅ Encontrados ${relevantFiltered.length} produtos com subtipo "${subtypes.join(", ")}"`);
+                    // Continuar com estes produtos (pular filtro genérico abaixo)
+                    // Re-atribuir para usar na sequência
+                    let relevantProducts = relevantFiltered;
+
+                    // Ir direto para exibição
+                    const products = relevantProducts.slice(0, 5);
+                    const bestMatch = products[0];
+
+                    console.log(`[AI Functions] ✅ Melhor match (com subtipo): "${bestMatch.name}" (score: ${bestMatch.score})`);
+
+                    const priceFormatted = bestMatch.price.toLocaleString("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                    });
+
+                    const hasImage = !!bestMatch.imageUrl;
+
+                    const productList = products.length > 1
+                        ? "\n\n📦 *Outros resultados:*\n" + products.slice(1).map((p: typeof products[0]) => {
+                            const pFormatted = p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+                            return `• ${p.name} - ${pFormatted}`;
+                        }).join("\n")
+                        : "";
+
+                    let stockInfo = "";
+                    let needsStockVerification = false;
+                    if (bestMatch.stockEnabled) {
+                        if (bestMatch.stockQuantity > 0) {
+                            stockInfo = `\n✅ Temos ${bestMatch.stockQuantity} unidades!`;
+                        } else {
+                            stockInfo = "\n⏳ Deixa eu confirmar a disponibilidade...";
+                            needsStockVerification = true;
+                        }
+                    }
+
+                    let sizesInfo = "";
+                    let availableSizes: string[] = [];
+                    if (bestMatch.sizes && bestMatch.sizes.length > 0) {
+                        availableSizes = bestMatch.sizes;
+                        sizesInfo = `\n📐 *Tamanhos:* ${availableSizes.join(", ")}`;
+                    }
+
+                    let colorsInfo = "";
+                    if (bestMatch.colors && bestMatch.colors.length > 0) {
+                        colorsInfo = `\n🎨 *Cores:* ${bestMatch.colors.join(", ")}`;
+                    }
+
+                    return {
+                        success: true,
+                        message: `Achei! 🎉\n\n📦 *${bestMatch.name}*\n💰 *Preço:* ${priceFormatted}${bestMatch.category ? `\n🏷️ Categoria: ${bestMatch.category.name}` : ""}${colorsInfo}${sizesInfo}${bestMatch.description ? `\n📝 ${bestMatch.description.substring(0, 100)}...` : ""}${stockInfo}${productList}\n\n*Quer comprar?* 🛒`,
+                        data: {
+                            found: true,
+                            productId: bestMatch.id,
+                            productName: bestMatch.name,
+                            productPrice: bestMatch.price,
+                            priceFormatted,
+                            hasImage,
+                            imageUrl: bestMatch.imageUrl,
+                            sendProductImage: hasImage,
+                            stockAvailable: !bestMatch.stockEnabled || bestMatch.stockQuantity > 0,
+                            availableSizes,
+                            availableColors: bestMatch.colors || [],
+                            subtypeMatch: subtypes,
+                            needsStockVerification,
+                        }
+                    };
+                }
+            }
+
+            console.log(`[AI Functions] ⚠️ Nenhum produto com subtipo "${subtypes.join(", ")}" encontrado`);
+            return {
+                success: true,
+                message: `Não encontrei ${subtypes.join(" ")} ${mainTerm} específico, mas posso verificar se temos! Deixa eu checar aqui...`,
+                data: { found: false, needsVerification: true, searchTerm: termo, subtypeRequested: subtypes }
+            };
+        }
 
         // 3. Filtrar produtos com pontuação > 0 e ordenar por relevância
         let relevantProducts = scoredProducts
