@@ -50,44 +50,38 @@ export const AI_TOOLS = [
             description: `Busca produtos no catálogo e ENVIA A FOTO automaticamente.
 
 ✅ SEMPRE USE esta função quando cliente:
-- Perguntar sobre QUALQUER produto ("tem camiseta?", "vocês têm vestido?", "tem chapéu?")
+- Perguntar sobre produto ("tem camiseta?", "vocês têm vestido?", "tem chapéu?")
 - Quiser ver fotos ("manda foto", "quero ver", "mostra")
 - Perguntar preço ("quanto é?", "qual o valor?")
 - Pedir cor específica ("quero a azul", "tem em preto?")
-- Pedir OUTROS MODELOS ("tem outros?", "mais opções?", "outros modelos")
-- Pedir OUTRAS CORES ("tem outra cor?", "manda outras cores")
-- Pedir MAIS DO MESMO ("tem mais?", "quero ver outros")
+- Pedir MAIS OPÇÕES ("tem outros?", "mais opções?", "quero ver mais")
 
-📦 TIPOS DE PRODUTOS (use o nome que cliente falar):
-- Roupas: camiseta, camisa, blusa, vestido, saia, calça, bermuda, shorts
-- Agasalhos: agasalho, casaco, jaqueta, moletom, blusa de frio
-- Acessórios: boné, chapéu, cap, touca, cinto, bolsa
-- Calçados: tênis, sapato, sandália
+📦 PRODUTOS: camiseta, camisa, blusa, vestido, saia, calça, bermuda, shorts, agasalho, casaco, jaqueta, moletom, boné, chapéu, cap, tênis
 
-⚠️ IMPORTANTE:
-- Se cliente pedir COR → passe no parâmetro 'cor'
-- Se cliente pedir "outros modelos" → busque o MESMO tipo de produto
-- NUNCA transfira para equipe sem antes tentar buscarProduto!
+🔄 PARA "OUTROS MODELOS" ou "QUERO VER MAIS":
+- Passe o MESMO termo de busca
+- Passe os IDs dos produtos JÁ MOSTRADOS em 'produtosJaEnviados'
+- A função vai retornar os PRÓXIMOS 10 produtos
 
 Exemplos:
-- "tem camiseta?" → buscarProduto(termo: "camiseta")
-- "manda foto da blusa" → buscarProduto(termo: "blusa")
-- "quero ver o chapéu" → buscarProduto(termo: "chapéu")
-- "tem agasalho?" → buscarProduto(termo: "agasalho")
-- "manda a calça preta" → buscarProduto(termo: "calça", cor: "preta")
-- "tem outros modelos?" → buscarProduto(termo: "[produto que estava vendo]")
-- "manda outras cores" → buscarProduto(termo: "[produto atual]")
-- "quero ver mais" → buscarProduto(termo: "[categoria do produto]")`,
+- "tem boné?" → buscarProduto(termo: "boné")
+- "tem outros?" → buscarProduto(termo: "boné", produtosJaEnviados: ["id1", "id2", ...])
+- "manda mais" → buscarProduto(termo: "[mesmo tipo]", produtosJaEnviados: [IDs anteriores])`,
             parameters: {
                 type: "object",
                 properties: {
                     termo: {
                         type: "string",
-                        description: "Nome do produto: camiseta, blusa, vestido, calça, bermuda, agasalho, casaco, jaqueta, moletom, boné, chapéu, etc. Se cliente pedir 'outros modelos', use o mesmo tipo de produto."
+                        description: "Nome do produto: camiseta, blusa, vestido, calça, bermuda, agasalho, boné, chapéu, etc."
                     },
                     cor: {
                         type: "string",
-                        description: "Cor específica se cliente mencionar: preto, branco, azul, vermelho, marrom, bege, off white, etc. SEMPRE preencha quando cliente pedir cor!"
+                        description: "Cor específica se cliente mencionar: preto, branco, azul, vermelho, marrom, etc."
+                    },
+                    produtosJaEnviados: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "IDs dos produtos já mostrados ao cliente. Use quando cliente pedir 'outros modelos' ou 'quero ver mais' para não repetir."
                     }
                 },
                 required: ["termo"]
@@ -653,6 +647,7 @@ async function buscarProduto(
 ): Promise<FunctionResult> {
     const termo = (args.termo as string || "").trim();
     const cor = (args.cor as string || "").trim();
+    const produtosJaEnviados = (args.produtosJaEnviados as string[] || []);
     const normalizedTermo = normalizeText(termo);
     const normalizedCor = normalizeText(cor);
 
@@ -661,10 +656,10 @@ async function buscarProduto(
 
     console.log(`[AI Functions] ========================================`);
     console.log(`[AI Functions] 🔍 BUSCA DE PRODUTO INICIADA`);
-    console.log(`[AI Functions] 📝 Termo original: "${termo}"`);
-    console.log(`[AI Functions] 📝 Termo principal: "${mainTerm}"`);
-    console.log(`[AI Functions] 🏷️ Subtipos extraídos: ${subtypes.length > 0 ? subtypes.join(", ") : "(nenhum)"}`);
+    console.log(`[AI Functions] 📝 Termo: "${termo}"`);
     console.log(`[AI Functions] 🎨 Cor: ${cor || "(nenhuma)"}`);
+    console.log(`[AI Functions] 🏷️ Subtipos: ${subtypes.length > 0 ? subtypes.join(", ") : "(nenhum)"}`);
+    console.log(`[AI Functions] 📦 Produtos já enviados: ${produtosJaEnviados.length}`);
     console.log(`[AI Functions] ========================================`);
 
     if (!termo) {
@@ -696,14 +691,21 @@ async function buscarProduto(
         }
 
         // 2. Calcular pontuação para cada produto
-        const scoredProducts = allProducts.map(product => ({
-            ...product,
-            score: calculateProductScore(
-                { name: product.name, description: product.description, colors: product.colors || [] },
-                normalizedTermo,
-                normalizedCor
-            )
-        }));
+        const scoredProducts = allProducts
+            // 2.1 Excluir produtos já enviados
+            .filter(product => !produtosJaEnviados.includes(product.id))
+            .map(product => ({
+                ...product,
+                score: calculateProductScore(
+                    { name: product.name, description: product.description, colors: product.colors || [] },
+                    normalizedTermo,
+                    normalizedCor
+                )
+            }));
+
+        if (produtosJaEnviados.length > 0) {
+            console.log(`[AI Functions] 🚫 Excluídos ${produtosJaEnviados.length} produtos já enviados`);
+        }
 
         // 2.5 FILTRO ESTRITO DE SUBTIPO
         // Se cliente pediu subtipo específico (polo, jeans, social), filtrar APENAS produtos que contêm
@@ -921,42 +923,13 @@ async function buscarProduto(
             };
         }
 
-        // 6. Limitar a 5 resultados para exibição
-        const products = relevantProducts.slice(0, 5);
+        // 6. Limitar resultados para exibição (AUMENTADO PARA 10)
+        const products = relevantProducts.slice(0, 10);
         const bestMatch = products[0];
 
         console.log(`[AI Functions] ✅ Melhor match: "${bestMatch.name}" (score: ${bestMatch.score})`);
 
-        const priceFormatted = bestMatch.price.toLocaleString("pt-BR", {
-            style: "currency",
-            currency: "BRL",
-        });
-
-        // Se tem imagem, sinaliza para enviar
-        const hasImage = !!bestMatch.imageUrl;
-
-        // Montar lista de produtos se houver mais de um
-        const productList = products.length > 1
-            ? "\n\n📦 *Outros resultados:*\n" + products.slice(1).map((p: typeof products[0]) => {
-                const pFormatted = p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-                return `• ${p.name} - ${pFormatted}`;
-            }).join("\n")
-            : "";
-
-        // Verificar estoque
-        let stockInfo = "";
-        let needsStockVerification = false;
-        if (bestMatch.stockEnabled) {
-            if (bestMatch.stockQuantity > 0) {
-                stockInfo = `\n✅ Temos ${bestMatch.stockQuantity} unidades em estoque!`;
-            } else {
-                stockInfo = "\n⏳ Deixa eu confirmar a disponibilidade...";
-                needsStockVerification = true;
-            }
-        }
-
         // Buscar tamanhos disponíveis
-        let sizesInfo = "";
         let availableSizes: string[] = [];
 
         const variants = await prisma.productVariant.findMany({
@@ -968,37 +941,58 @@ async function buscarProduto(
         });
 
         if (variants.length > 0) {
-            availableSizes = [...new Set(variants.map(v => v.size))];
-            sizesInfo = `\n📐 *Tamanhos disponíveis:* ${availableSizes.join(", ")}`;
+            availableSizes = Array.from(new Set(variants.map(v => v.size)));
         } else if (bestMatch.sizes && bestMatch.sizes.length > 0) {
             availableSizes = bestMatch.sizes;
-            sizesInfo = `\n📐 *Tamanhos:* ${availableSizes.join(", ")}`;
         }
 
-        // Cores disponíveis
-        let colorsInfo = "";
-        if (bestMatch.colors && bestMatch.colors.length > 0) {
-            colorsInfo = `\n🎨 *Cores:* ${bestMatch.colors.join(", ")}`;
+        // === FORMATAR LISTA DE PRODUTOS (LIMITE 10) ===
+        const EMOJI_NUMBERS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+
+        // Usar até 10 produtos
+        const productsToShow = products.slice(0, 10);
+        const productIds = productsToShow.map(p => p.id);
+        const totalAvailable = relevantProducts.length;
+        const hasMoreProducts = totalAvailable > 10;
+
+        console.log(`[AI Functions] 📋 Mostrando ${productsToShow.length} de ${totalAvailable} produtos encontrados`);
+
+        // Formatar lista bonita (só nome + preço)
+        const productListFormatted = productsToShow.map((p, index) => {
+            const emoji = EMOJI_NUMBERS[index] || `${index + 1}.`;
+            const priceStr = p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+            return `${emoji} *${p.name}* - ${priceStr}`;
+        }).join("\n");
+
+        // Mensagem final
+        let message = `Achei ${productsToShow.length} opções! 🎉\n\n${productListFormatted}`;
+
+        if (hasMoreProducts) {
+            message += `\n\n📦 Tem mais ${totalAvailable - 10} opções! Quer ver mais?`;
         }
+
+        message += `\n\n*Qual te interessou?* Me fala o número! 🛒`;
 
         return {
             success: true,
-            message: `Achei! 🎉\n\n📦 *${bestMatch.name}*\n💰 *Preço:* ${priceFormatted}${bestMatch.category ? `\n🏷️ Categoria: ${bestMatch.category.name}` : ""}${colorsInfo}${sizesInfo}${bestMatch.description ? `\n📝 ${bestMatch.description.substring(0, 150)}${bestMatch.description.length > 150 ? "..." : ""}` : ""}${stockInfo}${productList}\n\n*Deseja comprar?* Posso gerar o pedido pra você! 🛒`,
+            message,
             data: {
                 found: true,
-                productId: bestMatch.id,
-                productName: bestMatch.name,
-                productPrice: bestMatch.price,
-                priceFormatted,
-                hasImage,
+                products: productsToShow.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    price: p.price,
+                    priceFormatted: p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+                    imageUrl: p.imageUrl,
+                    hasImage: !!p.imageUrl
+                })),
+                productIds, // IDs para IA usar em produtosJaEnviados
+                totalAvailable,
+                hasMoreProducts,
+                sendProductImage: !!bestMatch.imageUrl,
                 imageUrl: bestMatch.imageUrl,
-                sendProductImage: hasImage,
-                stockAvailable: !bestMatch.stockEnabled || bestMatch.stockQuantity > 0,
-                stockQuantity: bestMatch.stockQuantity,
                 availableSizes,
                 availableColors: bestMatch.colors || [],
-                relevanceScore: bestMatch.score,
-                needsStockVerification,
             }
         };
     } catch (error) {
