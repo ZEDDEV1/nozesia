@@ -216,6 +216,59 @@ function attachClientEvents(session_name, client) {
             console.error(`[Webhook] Erro ao enviar mensagem para Next.js:`, err.message);
         }
     });
+
+    // =============================
+    // 📤 Capturar mensagens ENVIADAS pelo celular (fromMe)
+    // onAnyMessage captura TODAS as mensagens (recebidas + enviadas)
+    // onMessage só captura as recebidas
+    // =============================
+    client.onAnyMessage(async (message) => {
+        try {
+            // Só nos interessa mensagens enviadas por nós (fromMe)
+            if (!message.fromMe) return;
+
+            // Ignorar mensagens de grupo e status
+            if (message.isGroupMsg) return;
+            if (message.from === 'status@broadcast') return;
+            if (message.to === 'status@broadcast') return;
+
+            // Ignorar tipos de sistema/protocolo
+            const ignoreTypes = ['protocol', 'revoked', 'notification', 'e2e_notification', 'call_log'];
+            if (ignoreTypes.includes(message.type)) return;
+
+            console.log('\n====================================');
+            console.log('📤 MENSAGEM ENVIADA (fromMe) CAPTURADA');
+            console.log('====================================');
+            console.log('🔹 To:', message.to);
+            console.log('🔹 Type:', message.type);
+            console.log('🔹 Body preview:', (message.body || '').substring(0, 80));
+
+            const payload = {
+                event: 'onmessage',
+                session: session_name,
+                from: message.to,       // "from" = o destinatário (cliente)
+                to: message.from,       // "to" = nós
+                body: message.body || '',
+                type: message.type === 'chat' ? 'chat' : message.type,
+                isGroupMsg: false,
+                isMedia: message.isMedia || false,
+                mimetype: message.mimetype || null,
+                fromMe: true,           // Flag crucial para o webhook
+                sender: {
+                    id: message.from,
+                    pushname: 'Atendente',
+                },
+            };
+
+            // Send to Next.js webhook
+            console.log('📤 Enviando mensagem fromMe ao webhook...');
+            await axios.post(WEBHOOK_URL, payload);
+            console.log('✅ Mensagem fromMe enviada ao webhook');
+
+        } catch (err) {
+            console.error(`[Webhook] Erro ao enviar mensagem fromMe:`, err.message);
+        }
+    });
 }
 
 // =============================

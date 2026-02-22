@@ -312,12 +312,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true });
         }
 
-        // Skip messages sent by ourselves (fromMe)
+        // Detect messages sent by ourselves (fromMe)
+        // Instead of skipping ALL fromMe messages, we capture phone-sent messages
+        // to show them in the dashboard. We deduplicate later to avoid double-saving
+        // messages already saved by the dashboard API or AI handler.
         const isFromMe = messageData.fromMe || messageData.self || false;
-        if (isFromMe) {
-            logger.debug("Skipping message from self (fromMe)", { from });
-            return NextResponse.json({ success: true });
-        }
 
         // Skip system messages (notifications, calls, etc.)
         const messageSubtype = messageData.subtype || messageData.type || "";
@@ -631,6 +630,83 @@ export async function POST(request: Request) {
             mediaUrl = messageData.mediaUrl || messageData.body || null;
         }
 
+        // ==========================================
+        // HANDLE fromMe MESSAGES (sent from phone by owner)
+        // These are messages sent directly from the WhatsApp app
+        // We save them as HUMAN with deduplication against dashboard/AI messages
+        // ==========================================
+        if (isFromMe) {
+            // For fromMe, the "from" field is actually the RECIPIENT (the customer)
+            // The content is what WE sent to the customer
+            const fromMeContent = finalContent || messageBody || "";
+
+            if (!fromMeContent.trim()) {
+                logger.debug("Skipping empty fromMe message");
+                return NextResponse.json({ success: true });
+            }
+
+            // Deduplication: Check if this message was already saved in the last 60 seconds
+            // This happens when dashboard or AI sends a message → WPPConnect fires fromMe webhook
+            const recentDuplicate = await prisma.message.findFirst({
+                where: {
+                    conversationId: conversation.id,
+                    content: fromMeContent,
+                    sender: { in: ["AI", "HUMAN"] },
+                    createdAt: { gte: new Date(Date.now() - 60_000) }, // last 60 seconds
+                },
+                orderBy: { createdAt: "desc" },
+            });
+
+            if (recentDuplicate) {
+                logger.debug("Skipping duplicate fromMe message (already saved by dashboard/AI)", {
+                    existingId: recentDuplicate.id,
+                    sender: recentDuplicate.sender,
+                });
+                return NextResponse.json({ success: true });
+            }
+
+            // Not a duplicate — this was typed directly on the phone
+            logger.whatsapp("Capturing phone-sent message as HUMAN", {
+                conversationId: conversation.id,
+                contentPreview: fromMeContent.substring(0, 50),
+            });
+
+            const phoneSentMessage = await prisma.message.create({
+                data: {
+                    conversationId: conversation.id,
+                    type: messageType as "TEXT",
+                    content: fromMeContent,
+                    sender: "HUMAN",
+                    mediaUrl: mediaUrl,
+                },
+            });
+
+            // Emit via WebSocket so dashboard updates in real-time
+            emitSocketMessage(conversation.id, companyId, {
+                id: phoneSentMessage.id,
+                content: phoneSentMessage.content,
+                type: phoneSentMessage.type,
+                sender: "HUMAN",
+                createdAt: phoneSentMessage.createdAt.toISOString(),
+                mediaUrl: phoneSentMessage.mediaUrl,
+            });
+
+            // Update conversation timestamp and switch to HUMAN_HANDLING
+            await prisma.conversation.update({
+                where: { id: conversation.id },
+                data: {
+                    lastMessageAt: new Date(),
+                    status: "HUMAN_HANDLING", // Human took over by replying from phone
+                },
+            });
+
+            // Do NOT trigger AI response for messages we sent ourselves
+            return NextResponse.json({ success: true });
+        }
+
+        // ==========================================
+        // CUSTOMER MESSAGE: Save and process normally
+        // ==========================================
         if (!finalContent.trim() && !isMedia) {
             logger.debug("Skipping empty message");
             return NextResponse.json({ success: true });

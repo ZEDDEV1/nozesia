@@ -300,7 +300,11 @@ export default function ConversationsPage() {
             if (data.success) {
                 const { data: convData, pagination } = data.data;
                 if (append) {
-                    setConversations(prev => [...prev, ...convData]);
+                    setConversations(prev => {
+                        const existingIds = new Set(prev.map(c => c.id));
+                        const newConvs = convData.filter((c: { id: string }) => !existingIds.has(c.id));
+                        return [...prev, ...newConvs];
+                    });
                 } else {
                     setConversations(convData);
                 }

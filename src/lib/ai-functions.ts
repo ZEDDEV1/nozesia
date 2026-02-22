@@ -659,8 +659,47 @@ async function buscarProduto(
     console.log(`[AI Functions] 📝 Termo: "${termo}"`);
     console.log(`[AI Functions] 🎨 Cor: ${cor || "(nenhuma)"}`);
     console.log(`[AI Functions] 🏷️ Subtipos: ${subtypes.length > 0 ? subtypes.join(", ") : "(nenhum)"}`);
-    console.log(`[AI Functions] 📦 Produtos já enviados: ${produtosJaEnviados.length}`);
+    console.log(`[AI Functions] 📦 Produtos já enviados (da IA): ${produtosJaEnviados.length}`);
     console.log(`[AI Functions] ========================================`);
+
+    // AUTO-TRACKING: Se a IA não passou produtosJaEnviados, buscar do histórico
+    let allExcludedIds = [...produtosJaEnviados];
+    if (allExcludedIds.length === 0) {
+        try {
+            // Buscar mensagens recentes da IA nesta conversa
+            const recentAIMessages = await prisma.message.findMany({
+                where: {
+                    conversationId: context.conversationId,
+                    sender: "AI",
+                },
+                orderBy: { createdAt: "desc" },
+                take: 10,
+                select: { content: true },
+            });
+
+            // Buscar todos os produtos ativos da empresa para matching
+            const companyProducts = await prisma.product.findMany({
+                where: { companyId: context.companyId, isActive: true },
+                select: { id: true, name: true },
+            });
+
+            // Verificar quais nomes de produtos aparecem nas mensagens da IA
+            const aiContent = recentAIMessages.map(m => m.content).join(" ").toLowerCase();
+            for (const product of companyProducts) {
+                if (aiContent.includes(product.name.toLowerCase())) {
+                    allExcludedIds.push(product.id);
+                }
+            }
+
+            // Deduplicar
+            allExcludedIds = [...new Set(allExcludedIds)];
+            if (allExcludedIds.length > 0) {
+                console.log(`[AI Functions] 🔄 Auto-tracked ${allExcludedIds.length} product IDs from conversation history`);
+            }
+        } catch (err) {
+            console.error("[AI Functions] Failed to auto-track sent products:", err);
+        }
+    }
 
     if (!termo) {
         return {
@@ -692,8 +731,8 @@ async function buscarProduto(
 
         // 2. Calcular pontuação para cada produto
         const scoredProducts = allProducts
-            // 2.1 Excluir produtos já enviados
-            .filter(product => !produtosJaEnviados.includes(product.id))
+            // 2.1 Excluir produtos já enviados (inclui auto-tracked)
+            .filter(product => !allExcludedIds.includes(product.id))
             .map(product => ({
                 ...product,
                 score: calculateProductScore(
@@ -703,8 +742,8 @@ async function buscarProduto(
                 )
             }));
 
-        if (produtosJaEnviados.length > 0) {
-            console.log(`[AI Functions] 🚫 Excluídos ${produtosJaEnviados.length} produtos já enviados`);
+        if (allExcludedIds.length > 0) {
+            console.log(`[AI Functions] 🚫 Excluídos ${allExcludedIds.length} produtos já enviados`);
         }
 
         // 2.5 FILTRO ESTRITO DE SUBTIPO
@@ -735,66 +774,45 @@ async function buscarProduto(
                 if (relevantFiltered.length > 0) {
                     console.log(`[AI Functions] ✅ Encontrados ${relevantFiltered.length} produtos com subtipo "${subtypes.join(", ")}"`);
 
-                    // Ir direto para exibição
-                    const products = relevantFiltered.slice(0, 5);
-                    const bestMatch = products[0];
+                    // Formato unificado com lista de produtos (igual ao path principal)
+                    const productsToShow = relevantFiltered.slice(0, 10);
+                    const EMOJI_NUMBERS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
 
-                    console.log(`[AI Functions] ✅ Melhor match (com subtipo): "${bestMatch.name}" (score: ${bestMatch.score})`);
+                    console.log(`[AI Functions] ✅ Melhor match (com subtipo): "${productsToShow[0].name}" (score: ${productsToShow[0].score})`);
 
-                    const priceFormatted = bestMatch.price.toLocaleString("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                    });
+                    const productListFormatted = productsToShow.map((p, index) => {
+                        const emoji = EMOJI_NUMBERS[index] || `${index + 1}.`;
+                        const priceStr = p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+                        return `${emoji} *${p.name}* - ${priceStr}`;
+                    }).join("\n");
 
-                    const hasImage = !!bestMatch.imageUrl;
+                    let message = `Achei ${productsToShow.length} opções! 🎉\n\n${productListFormatted}`;
 
-                    const productList = products.length > 1
-                        ? "\n\n📦 *Outros resultados:*\n" + products.slice(1).map((p: typeof products[0]) => {
-                            const pFormatted = p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-                            return `• ${p.name} - ${pFormatted}`;
-                        }).join("\n")
-                        : "";
-
-                    let stockInfo = "";
-                    let needsStockVerification = false;
-                    if (bestMatch.stockEnabled) {
-                        if (bestMatch.stockQuantity > 0) {
-                            stockInfo = `\n✅ Temos ${bestMatch.stockQuantity} unidades!`;
-                        } else {
-                            stockInfo = "\n⏳ Deixa eu confirmar a disponibilidade...";
-                            needsStockVerification = true;
-                        }
+                    if (relevantFiltered.length > 10) {
+                        message += `\n\n📦 Tem mais ${relevantFiltered.length - 10} opções! Quer ver mais?`;
                     }
 
-                    let sizesInfo = "";
-                    let availableSizes: string[] = [];
-                    if (bestMatch.sizes && bestMatch.sizes.length > 0) {
-                        availableSizes = bestMatch.sizes;
-                        sizesInfo = `\n📐 *Tamanhos:* ${availableSizes.join(", ")}`;
-                    }
-
-                    let colorsInfo = "";
-                    if (bestMatch.colors && bestMatch.colors.length > 0) {
-                        colorsInfo = `\n🎨 *Cores:* ${bestMatch.colors.join(", ")}`;
-                    }
+                    message += `\n\n*Qual te interessou?* Me fala o número! 🛒`;
 
                     return {
                         success: true,
-                        message: `Achei! 🎉\n\n📦 *${bestMatch.name}*\n💰 *Preço:* ${priceFormatted}${bestMatch.category ? `\n🏷️ Categoria: ${bestMatch.category.name}` : ""}${colorsInfo}${sizesInfo}${bestMatch.description ? `\n📝 ${bestMatch.description.substring(0, 100)}...` : ""}${stockInfo}${productList}\n\n*Quer comprar?* 🛒`,
+                        message,
                         data: {
                             found: true,
-                            productId: bestMatch.id,
-                            productName: bestMatch.name,
-                            productPrice: bestMatch.price,
-                            priceFormatted,
-                            hasImage,
-                            imageUrl: bestMatch.imageUrl,
-                            sendProductImage: hasImage,
-                            stockAvailable: !bestMatch.stockEnabled || bestMatch.stockQuantity > 0,
-                            availableSizes,
-                            availableColors: bestMatch.colors || [],
+                            products: productsToShow.map(p => ({
+                                id: p.id,
+                                name: p.name,
+                                price: p.price,
+                                priceFormatted: p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+                                imageUrl: p.imageUrl,
+                                hasImage: !!p.imageUrl
+                            })),
+                            productIds: productsToShow.map(p => p.id),
+                            totalAvailable: relevantFiltered.length,
+                            hasMoreProducts: relevantFiltered.length > 10,
+                            availableSizes: productsToShow[0].sizes || [],
+                            availableColors: productsToShow[0].colors || [],
                             subtypeMatch: subtypes,
-                            needsStockVerification,
                         }
                     };
                 }
@@ -883,34 +901,20 @@ async function buscarProduto(
             }
         }
 
-        // 4.6 Ainda sem resultados? Mostrar produtos populares
+        // 4.6 Ainda sem resultados? Solicitar verificação com a equipe
+        // NUNCA dizer "não temos" — sempre verificar com a equipe
         if (relevantProducts.length === 0) {
-            console.log(`[AI Functions] ⚠️ Nenhum produto encontrado para "${termo}" - mostrando populares`);
+            console.log(`[AI Functions] ⚠️ Nenhum produto encontrado para "${termo}" - solicitando verificação`);
 
-            // Buscar produtos mais vendidos como sugestão
-            relevantProducts = scoredProducts
-                .slice(0, 5)
-                .map(p => ({ ...p, score: 1 })); // Score baixo pois são sugestões
-
-            if (relevantProducts.length > 0) {
-                const suggestions = relevantProducts.slice(0, 3).map(p => p.name).join(", ");
-                console.log(`[AI Functions] 💡 Sugerindo: ${suggestions}`);
-
-                return {
-                    success: true,
-                    message: `Não achei exatamente "${termo}", mas temos essas opções que você pode gostar! Quer que eu mostre?`,
-                    data: {
-                        found: false,
-                        hasSuggestions: true,
-                        suggestions: relevantProducts.slice(0, 3).map(p => ({
-                            id: p.id,
-                            name: p.name,
-                            price: p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-                        })),
-                        searchTerm: termo
-                    }
-                };
-            }
+            return {
+                success: true,
+                message: `Deixa eu verificar com a equipe sobre "${termo}"... Já te dou um retorno! 🔍`,
+                data: {
+                    found: false,
+                    needsVerification: true,
+                    searchTerm: termo,
+                }
+            };
         }
 
         // 5. Ainda sem resultados? Retorna para verificação

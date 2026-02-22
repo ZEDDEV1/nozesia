@@ -209,18 +209,63 @@ Aguarde um instante... ⏳`;
         // Check if AI is enabled for this company
         const aiIsEnabled = dbSession.company.aiEnabled ?? true;
 
+        // Determinar conteúdo da mensagem para a IA
+        // Para imagens: analisar com Vision e passar descrição como contexto
+        let aiMessageContent = body?.trim() || "";
+        let imageContext = "";
+
         if (
             aiIsEnabled &&
             conversation.status === "AI_HANDLING" &&
             conversation.agent &&
-            messageType === "TEXT" &&
-            body?.trim()
+            messageType === "IMAGE" &&
+            messageData.mediaUrl
         ) {
+            try {
+                // Usar Vision AI para analisar a imagem enviada pelo cliente
+                const { analyzeImage } = await import("./openai");
+                const imageAnalysis = await analyzeImage(
+                    messageData.mediaUrl,
+                    `Loja de roupas: ${dbSession.company.name}. Analise esta imagem enviada por um cliente via WhatsApp. Se for uma foto de produto/roupa, descreva detalhadamente (tipo, cor, estilo, tecido se possível).`
+                );
+
+                if (imageAnalysis.details?.isProductImage && imageAnalysis.details?.productDescription) {
+                    // Cliente enviou foto de produto — montar contexto para busca
+                    imageContext = `[O cliente enviou uma IMAGEM de um produto. Descrição da imagem: ${imageAnalysis.description}. Detalhes: ${imageAnalysis.details.productDescription}. IMPORTANTE: Use a função buscarProduto para verificar se temos este produto ou algo similar nos nossos cadastros.]`;
+                    aiMessageContent = body?.trim() || `O cliente enviou uma imagem de: ${imageAnalysis.description}`;
+                } else {
+                    imageContext = `[O cliente enviou uma imagem. Descrição: ${imageAnalysis.description}]`;
+                    aiMessageContent = body?.trim() || `O cliente enviou uma imagem: ${imageAnalysis.description}`;
+                }
+
+                logger.info("[Worker] Image analyzed for AI context", {
+                    type: imageAnalysis.type,
+                    isProduct: imageAnalysis.details?.isProductImage,
+                    conversationId: conversation.id,
+                });
+            } catch (imgError) {
+                logger.error("[Worker] Failed to analyze customer image", { error: imgError });
+                // Fallback: informar que recebeu imagem sem análise
+                aiMessageContent = body?.trim() || "O cliente enviou uma imagem";
+                imageContext = "[O cliente enviou uma imagem que não pôde ser analisada]";
+            }
+        }
+
+        const shouldRespondAI = aiIsEnabled &&
+            conversation.status === "AI_HANDLING" &&
+            conversation.agent &&
+            ((messageType === "TEXT" && body?.trim()) || (messageType === "IMAGE" && aiMessageContent));
+
+        if (shouldRespondAI) {
+            const fullContent = imageContext
+                ? `${imageContext}\n\nMensagem do cliente: ${aiMessageContent}`
+                : aiMessageContent;
+
             await generateAndSendAIResponse({
                 conversation,
-                agent: conversation.agent,
+                agent: conversation.agent!,
                 company: dbSession.company,
-                messageContent: body,
+                messageContent: fullContent,
                 customerPhone: from,
                 sessionName: session,
             });
@@ -370,7 +415,7 @@ async function generateAndSendAIResponse(params: {
         // Enviar via WhatsApp
         await wppConnect.sendTextMessage(sessionName, customerPhone, aiResult.response);
 
-        // Se a IA decidiu enviar um arquivo (ex: cardápio), enviar via WhatsApp
+        // Se a IA decidiu enviar um arquivo (ex: cardápio/documento), enviar via WhatsApp
         if (aiResult.fileToSend) {
             try {
                 logger.info("[MessageWorker] Sending file to customer", {
@@ -389,7 +434,37 @@ async function generateAndSendAIResponse(params: {
                 logger.info("[MessageWorker] File sent successfully");
             } catch (fileError) {
                 logger.error("[MessageWorker] Failed to send file", { error: fileError });
-                // Não falhar a resposta inteira por causa do erro de arquivo
+            }
+        }
+
+        // Enviar imagens de produtos (múltiplas)
+        if (aiResult.productImagesToSend && aiResult.productImagesToSend.length > 0) {
+            logger.info(`[MessageWorker] Sending ${aiResult.productImagesToSend.length} product images`, {
+                customerPhone,
+                products: aiResult.productImagesToSend.map(p => p.productName),
+            });
+
+            for (const productImage of aiResult.productImagesToSend) {
+                try {
+                    await wppConnect.sendFile(
+                        sessionName,
+                        customerPhone,
+                        productImage.url,
+                        productImage.fileName
+                    );
+                    logger.info(`[MessageWorker] Product image sent: ${productImage.productName}`);
+
+                    // Pequeno delay entre imagens para não sobrecarregar
+                    if (aiResult.productImagesToSend!.length > 1) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                } catch (imgError) {
+                    logger.error(`[MessageWorker] Failed to send product image: ${productImage.productName}`, {
+                        error: imgError,
+                        url: productImage.url,
+                    });
+                    // Continuar com as próximas imagens mesmo se uma falhar
+                }
             }
         }
 

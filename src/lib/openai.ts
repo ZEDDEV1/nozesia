@@ -90,6 +90,11 @@ export interface FunctionCallResult {
         fileName: string;
         documentTitle: string;
     };
+    productImagesToSend?: Array<{
+        url: string;
+        fileName: string;
+        productName: string;
+    }>;
 }
 
 /**
@@ -160,6 +165,7 @@ export async function generateAIResponseWithFunctions(
     // Process function calls
     const toolResults: Array<{ role: "tool"; tool_call_id: string; content: string }> = [];
     let fileToSend: { url: string; fileName: string; documentTitle: string } | undefined;
+    let productImagesToSend: Array<{ url: string; fileName: string; productName: string }> = [];
 
     for (const toolCall of message.tool_calls) {
         // Type assertion to access function property (OpenAI types have a union)
@@ -188,14 +194,33 @@ export async function generateAIResponseWithFunctions(
             console.log("[OpenAI] fileToSend captured:", fileToSend);
         }
 
-        // Capturar imagem de produto para envio
-        if (functionName === "buscarProduto" && result.success && result.data?.sendProductImage) {
-            fileToSend = {
-                url: result.data.imageUrl as string,
-                fileName: `${(result.data.productName as string || "produto").replace(/[^a-zA-Z0-9]/g, "_")}.jpg`,
-                documentTitle: result.data.productName as string || "Produto",
-            };
-            console.log("[OpenAI] Product image captured for sending:", fileToSend);
+        // Capturar TODAS as imagens de produtos para envio (não apenas a primeira)
+        if (functionName === "buscarProduto" && result.success && result.data) {
+            // Se retornou lista de produtos, capturar todas as imagens
+            const products = result.data.products as Array<{ id: string; name: string; imageUrl?: string; hasImage?: boolean }> | undefined;
+            if (products && products.length > 0) {
+                const images = products
+                    .filter(p => p.imageUrl && p.hasImage)
+                    .slice(0, 5) // Limitar a 5 imagens para não sobrecarregar
+                    .map(p => ({
+                        url: p.imageUrl as string,
+                        fileName: `${(p.name || "produto").replace(/[^a-zA-Z0-9]/g, "_")}.jpg`,
+                        productName: p.name || "Produto",
+                    }));
+                if (images.length > 0) {
+                    productImagesToSend = images;
+                    console.log(`[OpenAI] ${images.length} product images captured for sending`);
+                }
+            }
+            // Fallback: produto único (formato antigo com sendProductImage)
+            else if (result.data.sendProductImage && result.data.imageUrl) {
+                productImagesToSend = [{
+                    url: result.data.imageUrl as string,
+                    fileName: `${(result.data.productName as string || "produto").replace(/[^a-zA-Z0-9]/g, "_")}.jpg`,
+                    productName: result.data.productName as string || "Produto",
+                }];
+                console.log("[OpenAI] Single product image captured for sending");
+            }
         }
 
         if (functionName === "transferirParaHumano" && result.success) {
@@ -217,15 +242,22 @@ export async function generateAIResponseWithFunctions(
             };
         }
 
-        // Preparar resultado de buscarProduto para a IA (sem expor URLs)
-        if (functionName === "buscarProduto" && result.success && result.data?.imageUrl) {
+        // Preparar resultado de buscarProduto para a IA (sem expor NENHUMA URL)
+        if (functionName === "buscarProduto" && result.success && result.data) {
+            // Limpar URLs de TODOS os produtos para que a IA não as inclua no texto
+            const cleanProducts = (result.data.products as Array<Record<string, unknown>> | undefined)?.map(p => ({
+                ...p,
+                imageUrl: undefined,
+                hasImage: undefined,
+            }));
             resultForAI = {
                 ...result,
-                message: result.message + "\n\n[A imagem do produto está sendo enviada automaticamente - NÃO inclua links na sua resposta]",
+                message: result.message + "\n\n⚠️ REGRA: As imagens dos produtos estão sendo enviadas AUTOMATICAMENTE como anexo. NUNCA inclua links, URLs ou endereços de imagem na sua resposta de texto. Apenas descreva os produtos.",
                 data: {
                     ...result.data,
-                    imageUrl: undefined, // Não expor URL para a IA
+                    imageUrl: undefined,
                     sendProductImage: undefined,
+                    products: cleanProducts,
                 },
             };
         }
@@ -303,6 +335,7 @@ export async function generateAIResponseWithFunctions(
         functionsCalled,
         wasTransferred,
         fileToSend,
+        productImagesToSend: productImagesToSend.length > 0 ? productImagesToSend : undefined,
     };
 }
 
