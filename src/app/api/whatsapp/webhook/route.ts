@@ -211,6 +211,7 @@ export async function POST(request: Request) {
     try {
         const body = await request.json();
 
+        logger.info('>>> [WEBHOOK RAW PAYLOAD RECEIVED] <<<', { event: body.event || body.type, session: body.session, from: body.data?.from || body.from || "UNKNOWN" });
         logger.whatsapp('Received webhook', { event: body.event || body.type, session: body.session });
 
         const event = body.event || body.type;
@@ -272,7 +273,7 @@ export async function POST(request: Request) {
         }
 
         if (!event?.includes("message") && event !== "onmessage") {
-            logger.debug('Skipping non-message event', { event });
+            logger.info('Skipping non-message event', { event });
             return NextResponse.json({ success: true });
         }
 
@@ -292,12 +293,12 @@ export async function POST(request: Request) {
         }
 
         if (isGroupMsg) {
-            logger.debug("Skipping group message");
+            logger.info("Skipping group message");
             return NextResponse.json({ success: true });
         }
 
         if (!from) {
-            logger.debug("No sender found in message");
+            logger.info("No sender found in message");
             return NextResponse.json({ success: true });
         }
 
@@ -307,7 +308,7 @@ export async function POST(request: Request) {
 
         // Skip status/stories (sent via status@broadcast)
         if (from.includes("status@broadcast") || from === "status@broadcast") {
-            logger.debug("Skipping status/story message", { from });
+            logger.info("Skipping status/story message", { from });
             return NextResponse.json({ success: true });
         }
 
@@ -319,7 +320,7 @@ export async function POST(request: Request) {
 
         // Skip newsletter/channel messages
         if (from.includes("@newsletter") || from.includes("@channel")) {
-            logger.debug("Skipping newsletter/channel message", { from });
+            logger.info("Skipping newsletter/channel message", { from });
             return NextResponse.json({ success: true });
         }
 
@@ -332,7 +333,7 @@ export async function POST(request: Request) {
         // Skip system messages (notifications, calls, etc.)
         const messageSubtype = messageData.subtype || messageData.type || "";
         if (["notification", "call_log", "e2e_notification", "gp2", "ciphertext", "revoked"].includes(messageSubtype.toLowerCase())) {
-            logger.debug("Skipping system message", { subtype: messageSubtype });
+            logger.info("Skipping system message", { subtype: messageSubtype });
             return NextResponse.json({ success: true });
         }
 
@@ -350,7 +351,7 @@ export async function POST(request: Request) {
             const messageAge = Date.now() - messageDate.getTime();
 
             if (messageAge > MAX_MESSAGE_AGE_MS) {
-                logger.debug("Skipping old message (received after connection)", {
+                logger.info("Skipping old message (received after connection)", {
                     from,
                     ageMinutes: Math.round(messageAge / 60000),
                     timestamp: new Date(messageTimestamp * 1000).toISOString()
@@ -362,13 +363,13 @@ export async function POST(request: Request) {
         logger.whatsapp("Processing message", { from, type: messageType });
 
         if (!session) {
-            logger.debug("No session in payload");
+            logger.info("No session in payload");
             return NextResponse.json({ success: true });
         }
 
         const sessionParts = session.split("_");
         if (sessionParts.length < 2) {
-            logger.debug("Invalid session format", { session });
+            logger.info("Invalid session format", { session });
             return NextResponse.json({ success: true });
         }
 
@@ -389,7 +390,7 @@ export async function POST(request: Request) {
         });
 
         if (!dbSession) {
-            logger.debug("Session not found for company", { companyId });
+            logger.info("Session not found for company", { companyId });
             return NextResponse.json({ success: true });
         }
 
