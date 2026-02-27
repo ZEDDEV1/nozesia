@@ -151,13 +151,22 @@ function attachClientEvents(session_name, client) {
                 console.log('Could not get contact:', e.message);
             }
 
+            // Sanitização do Body base: se for gigante (base64 vazado internamente do wppconnect) e não for mídia explícita, descartamos.
+            let safeBody = message.body || '';
+            // Se o body tem mais de 50.000 caracteres, provavelmente é mídia ou VCard vazado no texto.
+            // Cortaremos para 10.000 (um tamanho razoável para texto muito longo) para evitar travar o webhook "Request body exceeded 10MB"
+            if (safeBody.length > 50000 && !message.isMedia && !message.mimetype) {
+                console.log('⚠️ Body de texto anormalmente grande detectado, possivel base64 interno. Cortando.', safeBody.length);
+                safeBody = safeBody.substring(0, 10000) + '... [Cortado por excesso de caracteres]';
+            }
+
             // Prepare payload
             let payload = {
                 event: 'onmessage',
                 session: session_name,
                 from: message.from,
                 to: message.to,
-                body: message.body || '',
+                body: safeBody,
                 type: message.type,
                 isGroupMsg: message.isGroupMsg,
                 isMedia: message.isMedia || false,
@@ -243,12 +252,19 @@ function attachClientEvents(session_name, client) {
             console.log('🔹 Type:', message.type);
             console.log('🔹 Body preview:', (message.body || '').substring(0, 80));
 
+            // Sanitização do Body base: se for gigante, reduzimos drásticamente para evitar erro 413 no webhook
+            let safeBody = message.body || '';
+            if (safeBody.length > 50000 && !message.isMedia && !message.mimetype) {
+                console.log('⚠️ Body fromMe anormalmente grande detectado, possivel base64 interno. Cortando.', safeBody.length);
+                safeBody = safeBody.substring(0, 10000) + '... [Cortado por excesso de caracteres]';
+            }
+
             const payload = {
                 event: 'onmessage',
                 session: session_name,
                 from: message.to,       // "from" = o destinatário (cliente)
                 to: message.from,       // "to" = nós
-                body: message.body || '',
+                body: safeBody,
                 type: message.type === 'chat' ? 'chat' : message.type,
                 isGroupMsg: false,
                 isMedia: message.isMedia || false,
