@@ -25,7 +25,7 @@ let sessions = {};
 let lastSessionCreate = 0;
 
 // Webhook URL para o Next.js
-const WEBHOOK_URL = process.env.WEBHOOK_URL || 'http://localhost:3000/api/whatsapp/webhook';
+const WEBHOOK_URL = process.env.WEBHOOK_URL || 'http://localhost:3004/api/whatsapp/webhook';
 const SECRET_TOKEN = process.env.SECRET_TOKEN || 'AGENTEDEIA_SECRET_2024';
 
 // =============================

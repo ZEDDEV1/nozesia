@@ -118,7 +118,7 @@ export async function startSession(session: string, webhookUrl?: string): Promis
             return null;
         }
 
-        const webhook = webhookUrl || process.env.WPPCONNECT_WEBHOOK_URL || `http://localhost:3000/api/whatsapp/webhook`;
+        const webhook = webhookUrl || process.env.WPPCONNECT_WEBHOOK_URL || `http://localhost:3004/api/whatsapp/webhook`;
         console.log("[WPPConnect] Starting session with webhook:", webhook);
 
         const result = await wppRequest<{
