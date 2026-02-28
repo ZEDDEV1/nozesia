@@ -193,15 +193,37 @@ COMO AGIR:
 }
 
 export async function POST(request: Request) {
+    // ============================================
+    // 🔍 DEBUG: console.log puro (SEMPRE aparece no PM2, diferente do logger)
+    // ============================================
+    console.log('\n\n========================================');
+    console.log('🔥 [WEBHOOK] POST RECEBIDO!');
+    console.log('🔥 [WEBHOOK] URL:', request.url);
+    console.log('🔥 [WEBHOOK] Timestamp:', new Date().toISOString());
+    console.log('========================================\n');
+
     // Rate limiting - protege contra flood de mensagens
     const rateLimitResponse = await rateLimitMiddleware(request, 'webhook');
     if (rateLimitResponse) {
+        console.log('⛔ [WEBHOOK] Rate limited!');
         logger.warn('Webhook rate limited');
         return rateLimitResponse;
     }
 
     try {
-        const body = await request.json();
+        let body;
+        try {
+            body = await request.json();
+        } catch (parseError: any) {
+            console.error('❌ [WEBHOOK] ERRO AO FAZER PARSE DO BODY:', parseError.message);
+            return NextResponse.json({ success: false, error: 'Invalid JSON' }, { status: 400 });
+        }
+
+        console.log('✅ [WEBHOOK] Body parseado com sucesso!', {
+            event: body.event || body.type,
+            session: body.session,
+            from: body.data?.from || body.from || 'UNKNOWN',
+        });
 
         logger.info('>>> [WEBHOOK RAW PAYLOAD RECEIVED] <<<', { event: body.event || body.type, session: body.session, from: body.data?.from || body.from || "UNKNOWN" });
         logger.whatsapp('Received webhook', { event: body.event || body.type, session: body.session });
