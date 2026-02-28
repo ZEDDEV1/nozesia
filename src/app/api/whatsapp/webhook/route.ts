@@ -1069,6 +1069,36 @@ export async function POST(request: Request) {
                         }
                     }
 
+                    // Enviar imagens de produtos (múltiplas) se houver
+                    if (aiResult.productImagesToSend && aiResult.productImagesToSend.length > 0) {
+                        logger.info(`[Webhook] Sending ${aiResult.productImagesToSend.length} product images`, {
+                            customerPhone: originalFrom,
+                            products: aiResult.productImagesToSend.map(p => p.productName),
+                        });
+
+                        for (const productImage of aiResult.productImagesToSend) {
+                            try {
+                                await wppConnect.sendFile(
+                                    session,
+                                    originalFrom,
+                                    productImage.url,
+                                    productImage.fileName
+                                );
+                                logger.info(`[Webhook] Product image sent: ${productImage.productName}`);
+
+                                // Pequeno delay entre imagens
+                                if (aiResult.productImagesToSend!.length > 1) {
+                                    await new Promise(resolve => setTimeout(resolve, 500));
+                                }
+                            } catch (imgError) {
+                                logger.error(`[Webhook] Failed to send product image: ${productImage.productName}`, {
+                                    error: imgError,
+                                    url: productImage.url,
+                                });
+                            }
+                        }
+                    }
+
                     // Track token usage for THIS company only
                     const currentMonth = new Date();
                     currentMonth.setDate(1);
