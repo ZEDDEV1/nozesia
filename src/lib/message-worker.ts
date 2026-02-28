@@ -391,6 +391,10 @@ async function generateAndSendAIResponse(params: {
         },
     });
 
+    console.log('🖼️ [WORKER] aiResult.productImagesToSend:', JSON.stringify(aiResult.productImagesToSend?.map(p => ({ url: p.url?.substring(0, 80), name: p.productName })) || 'VAZIO/NULL'));
+    console.log('📎 [WORKER] aiResult.fileToSend:', aiResult.fileToSend ? 'SIM' : 'NAO');
+    console.log('📝 [WORKER] aiResult.functionsCalled:', aiResult.functionsCalled);
+
     if (aiResult.response) {
         // Salvar resposta da IA
         const aiMessage = await prisma.message.create({
@@ -439,6 +443,7 @@ async function generateAndSendAIResponse(params: {
 
         // Enviar imagens de produtos (múltiplas)
         if (aiResult.productImagesToSend && aiResult.productImagesToSend.length > 0) {
+            console.log(`🖼️ [WORKER] ENVIANDO ${aiResult.productImagesToSend.length} IMAGENS DE PRODUTOS!`);
             logger.info(`[MessageWorker] Sending ${aiResult.productImagesToSend.length} product images`, {
                 customerPhone,
                 products: aiResult.productImagesToSend.map(p => p.productName),
