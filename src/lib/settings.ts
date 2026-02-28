@@ -7,8 +7,8 @@
  * Uso:
  *   import { getSetting, setSetting, getAllSettings } from "@/lib/settings";
  *   
- *   const model = await getSetting("openaiModel", "gpt-4o-mini");
- *   await setSetting("openaiModel", "gpt-4o");
+ *   const model = await getSetting("openaiModel", "gpt-4.1-mini");
+ *   await setSetting("openaiModel", "gpt-4.1");
  */
 
 import { prisma } from "./prisma";
@@ -29,7 +29,7 @@ export interface SettingDefinition {
 export const SETTING_DEFINITIONS: Record<string, SettingDefinition> = {
     openaiModel: {
         key: "openaiModel",
-        defaultValue: "gpt-4o-mini",
+        defaultValue: "gpt-4.1-mini",
         description: "Modelo da OpenAI para respostas de IA",
     },
     webhookUrl: {
@@ -265,7 +265,7 @@ export async function getSettingNumber(key: string, defaultValue = 0): Promise<n
  * Get the configured OpenAI model
  */
 export async function getOpenAIModel(): Promise<string> {
-    return getSetting("openaiModel", "gpt-4o-mini");
+    return getSetting("openaiModel", "gpt-4.1-mini");
 }
 
 /**

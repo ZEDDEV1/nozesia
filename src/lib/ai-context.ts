@@ -111,7 +111,7 @@ export async function summarizeConversation(messages: ChatMessage[]): Promise<st
 
     try {
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-4.1-mini",
             messages: [
                 {
                     role: "system",
@@ -223,7 +223,7 @@ export async function detectIntentWithAI(messages: ChatMessage[]): Promise<Inten
 
     try {
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-4.1-mini",
             messages: [
                 {
                     role: "system",
@@ -289,7 +289,7 @@ export async function detectNicheFromTrainingData(trainingContent: string): Prom
 
     try {
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-4.1-mini",
             messages: [
                 {
                     role: "system",
