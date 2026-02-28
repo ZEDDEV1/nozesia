@@ -214,8 +214,8 @@ export async function POST(request: Request) {
         let body;
         try {
             body = await request.json();
-        } catch (parseError: any) {
-            console.error('❌ [WEBHOOK] ERRO AO FAZER PARSE DO BODY:', parseError.message);
+        } catch (parseError: unknown) {
+            console.error('❌ [WEBHOOK] ERRO AO FAZER PARSE DO BODY:', parseError instanceof Error ? parseError.message : parseError);
             return NextResponse.json({ success: false, error: 'Invalid JSON' }, { status: 400 });
         }
 
