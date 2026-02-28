@@ -97,7 +97,9 @@ const nextConfig: NextConfig = {
 
   // Turbopack config (Next.js 16+)
   experimental: {
-    // Keep empty
+    serverActions: {
+      bodySizeLimit: "50mb", // Permite payloads grandes do WPPConnect (base64 de mídia)
+    },
   },
 };
 

@@ -12,17 +12,9 @@ import { getCustomerMemory, formatMemoryForPrompt, updateCustomerMemory, generat
 import { cacheTrainingData } from "@/lib/cache";
 import { selectBestAgent } from "@/lib/agent-router";
 
-// Aumenta o tempo que a rota pode rodar e o limite de tamanho do payload
-// Isso permite que a IA tenha mais tempo para processar arquivos grandes e que
-// payloads base64 do WPPConnect > 10MB sejam recebidos com sucesso.
-export const maxDuration = 60; // 60 segundos
-export const config = {
-    api: {
-        bodyParser: {
-            sizeLimit: "50mb", // Aumenta limite para 50MB (útil para base64)
-        },
-    },
-};
+// Aumenta o tempo máximo que a rota pode rodar (em segundos)
+export const maxDuration = 60;
+
 // Valid message types in the database
 const VALID_MESSAGE_TYPES = ["TEXT", "IMAGE", "AUDIO", "VIDEO", "DOCUMENT", "STICKER", "LOCATION"];
 
