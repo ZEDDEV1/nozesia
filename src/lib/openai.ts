@@ -194,25 +194,22 @@ export async function generateAIResponseWithFunctions(
             console.log("[OpenAI] fileToSend captured:", fileToSend);
         }
 
-        // Capturar TODAS as imagens de produtos para envio (não apenas a primeira)
-        if (functionName === "buscarProduto" && result.success && result.data) {
-            // Se retornou lista de produtos, capturar todas as imagens
+        // Capturar imagens de produtos APENAS se a IA decidiu enviar (enviarFoto = true)
+        if (functionName === "buscarProduto" && result.success && result.data && args.enviarFoto === true) {
+            // Se retornou lista de produtos, capturar apenas a PRIMEIRA (melhor match)
             const products = result.data.products as Array<{ id: string; name: string; imageUrl?: string; hasImage?: boolean }> | undefined;
             if (products && products.length > 0) {
-                const images = products
-                    .filter(p => p.imageUrl && p.hasImage)
-                    .slice(0, 5) // Limitar a 5 imagens para não sobrecarregar
-                    .map(p => ({
-                        url: p.imageUrl as string,
-                        fileName: `${(p.name || "produto").replace(/[^a-zA-Z0-9]/g, "_")}.jpg`,
-                        productName: p.name || "Produto",
-                    }));
-                if (images.length > 0) {
-                    productImagesToSend = images;
-                    console.log(`[OpenAI] ${images.length} product images captured for sending`);
+                const bestImageProduct = products.find(p => p.imageUrl && p.hasImage);
+                if (bestImageProduct) {
+                    productImagesToSend = [{
+                        url: bestImageProduct.imageUrl as string,
+                        fileName: `${(bestImageProduct.name || "produto").replace(/[^a-zA-Z0-9]/g, "_")}.jpg`,
+                        productName: bestImageProduct.name || "Produto",
+                    }];
+                    console.log(`[OpenAI] 1 product image captured for sending (best match)`);
                 }
             }
-            // Fallback: produto único (formato antigo com sendProductImage)
+            // Fallback: produto único (formato antigo)
             else if (result.data.sendProductImage && result.data.imageUrl) {
                 productImagesToSend = [{
                     url: result.data.imageUrl as string,

@@ -58,6 +58,8 @@ export const AI_TOOLS = [
 
 📦 PRODUTOS: camiseta, camisa, blusa, vestido, saia, calça, bermuda, shorts, agasalho, casaco, jaqueta, moletom, boné, chapéu, cap, tênis
 
+📸 FOTOS: Use o parâmetro 'enviarFoto: true' APENAS quando o cliente pedir explicitamente para ver foto, imagem ou modelo. Se for só para listar opções, passe 'enviarFoto: false'.
+
 🔄 PARA "OUTROS MODELOS" ou "QUERO VER MAIS":
 - Passe o MESMO termo de busca
 - Passe os IDs dos produtos JÁ MOSTRADOS em 'produtosJaEnviados'
@@ -82,6 +84,10 @@ Exemplos:
                         type: "array",
                         items: { type: "string" },
                         description: "IDs dos produtos já mostrados ao cliente. Use quando cliente pedir 'outros modelos' ou 'quero ver mais' para não repetir."
+                    },
+                    enviarFoto: {
+                        type: "boolean",
+                        description: "SEMPRE passe true SE O CLIENTE PEDIU PARA VER A FOTO DO PRODUTO. Se false, a IA vai apenas falar os detalhes sem enviar imagem."
                     }
                 },
                 required: ["termo"]
@@ -961,12 +967,14 @@ async function buscarProduto(
 
         console.log(`[AI Functions] 📋 Mostrando ${productsToShow.length} de ${totalAvailable} produtos encontrados`);
 
-        // Formatar lista bonita (só nome + preço)
+        // Formatar lista detalhada (mais requintada para IA repassar)
         const productListFormatted = productsToShow.map((p, index) => {
             const emoji = EMOJI_NUMBERS[index] || `${index + 1}.`;
             const priceStr = p.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-            return `${emoji} *${p.name}* - ${priceStr}`;
-        }).join("\n");
+            const corStr = p.colors?.length ? ` | 🎨 Cores: ${p.colors.join(", ")}` : "";
+            const desc = p.description ? `\n   📝 ${p.description.substring(0, 80)}...` : "";
+            return `${emoji} *${p.name}* - ${priceStr}${corStr}${desc}`;
+        }).join("\n\n");
 
         // Mensagem final
         let message = `Achei ${productsToShow.length} opções! 🎉\n\n${productListFormatted}`;
